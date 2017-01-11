@@ -1,23 +1,49 @@
-/*
- * Skeleton code for your Lexer, provided by Emma Norling
- *
- * Please note that this code is far from complete.
- * It needs to be extended and the documentation updated to reflect your changes.
- *
- */
 lexer grammar DecafLexer;
 
-// This rule matches one of the keywords for Decaf - what others do you need?
+// Keywords:
 CLASS : 'class';
+BOOLEAN : 'boolean';
+FOR : 'for';
+BREAK : 'break';
+IF : 'if';
+CALLOUT : 'callout';
+INT : 'int';
+RETURN : 'return';
+CONTINUE : 'continue';
+TRUE : 'true';
+ELSE : 'else';
+VOID : 'void';
 
-// These two rules deal with characters that have special meaning in Decaf - again, what others?
+// Special terminals
 LCURLY : '{';
 RCURLY : '}';
+LBRACE : '[';
+RBRACE : ']';
+LPAREN : '(';
+RPAREN : ')';
 
-// This says an identifier is a sequence of one or more alphabetic characters
-// Decaf is a little more sophisticated than this.
-ID : 
-  ('a'..'z' | 'A'..'Z')+;
+// Operators
+UMINUS : '-';
+BANG : '!';
+MULTIPLY : '*';
+DIVIDE : '/';
+MODULO : '%';
+PLUS : '+';
+SUBTRACT : '-';
+LESSTHAN : '<';
+LSSTNEQTO : '<=';
+GREATERTHAN : '>';
+GRTRTNEQTO : '>=';
+EQUAL : '==';
+NOTEQUAL : '!=';
+AND : '&&';
+OR : '||';
+NOT : '~';
+ASSIGN : '=';
+
+ID : ('a'..'z' | 'A'..'Z')('a'..'z' | 'A'..'Z' | '0'..'9')+;
+
+NUMBER : ('0'..'9')+;
 
 // This rule simply ignores (skips) any space or newline characters
 WS_ : (' ' | '\n' ) -> skip;

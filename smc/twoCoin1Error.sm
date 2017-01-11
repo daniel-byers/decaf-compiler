@@ -1,0 +1,25 @@
+Actions: Turnstile
+FSM: TwoCoinTurnstile
+Initial: Locked
+{ error
+  Locked {
+    Pass  Alarming   alarmOn
+    Coin  FirstCoin  -
+    Reset Locked     {lock alarmOff}
+  }
+	
+  Alarming  Reset  Locked  {lock alarmOff}
+	
+  FirstCoin {
+    Pass  Alarming  -
+    Coin  Unlocked  unlock
+    Reset Locked    {lock alarmOff}
+  }
+	
+  Unlocked {
+    Pass  Locked  lock
+    Coin  -       thankyou
+    Reset Locked  {lock alarmOff}
+  }
+}
+
