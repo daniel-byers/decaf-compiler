@@ -1,18 +1,19 @@
 lexer grammar DecafLexer;
-
+@headers {
+  import java.util.*;  
+}
 // Keywords:
-CLASS : 'class';
-BOOLEAN : 'boolean';
-FOR : 'for';
-BREAK : 'break';
-IF : 'if';
-CALLOUT : 'callout';
-INT : 'int';
-RETURN : 'return';
-CONTINUE : 'continue';
-TRUE : 'true';
-ELSE : 'else';
-VOID : 'void';
+CLASS     : 'class';
+BOOLEAN   : 'boolean';
+FOR       : 'for';
+BREAK     : 'break';
+IF        : 'if';
+ELSE      : 'else';
+CALLOUT   : 'callout';
+INT       : 'int';
+RETURN    : 'return';
+CONTINUE  : 'continue';
+VOID      : 'void';
 
 // Special terminals
 LCURLY : '{';
@@ -23,47 +24,59 @@ LPAREN : '(';
 RPAREN : ')';
 
 // Operators
-UMINUS : '-';
-BANG : '!';
-MULTIPLY : '*';
-DIVIDE : '/';
-MODULO : '%';
-PLUS : '+';
-SUBTRACT : '-';
-LESSTHAN : '<';
-LSSTNEQTO : '<=';
-GREATERTHAN : '>';
-GRTRTNEQTO : '>=';
-EQUAL : '==';
-NOTEQUAL : '!=';
-AND : '&&';
-OR : '||';
-NOT : '~';
-ASSIGN : '=';
+ARITHMATIC  : ('+' | '-' | '/' | '*' | '%');
+COMPARISON  : ('==' | '!=' | '<' | '>' | '<=' | '>=');
+LOGIC       : ('&&' | '||' | '~');
+ASSIGNMENT  : '=';
+COMMA       : ',';
+LINEEND     : ';';
 
-ID : ('a'..'z' | 'A'..'Z')('a'..'z' | 'A'..'Z' | '0'..'9')+;
+// Any number in the range zero to nine.
+INTLITERAL : (DECLITERAL | HEXLITERAL);
 
-NUMBER : ('0'..'9')+;
+// Any instance of the boolean expressions of truth and non-truth.
+BOOLEANLITERAL : ('true' | 'false');
 
-// This rule simply ignores (skips) any space or newline characters
+// One character enclosed within single quotes.
+CHARLITERAL : '\'' CHAR '\'';
+
+// Any number of characters enclosed within double quotes.
+STRINGLITERAL : '"' CHAR* '"';
+
+// This rule simply ignores any space or newline characters.
 WS_ : (' ' | '\n' ) -> skip;
 
-// And this rule ignores comments (everything from a '//' to the end of the line)
+// This rule ignores comments ('//' to the end of the line).
 SL_COMMENT : '//' (~'\n')* '\n' -> skip;
 
-// These two rules incompletely describe characters and strings, and make use of the ESC fragment described below
-// This rule says a character is contained within single quotes, and is a single instance of either an ESC, or any
-// character other than a single quote.
-CHAR : '\'' (ESC|~'\'') '\'';
-// This rule says a string is contained within double quotes, and is zero or more instances of either an ESC, or any
-// character other than a double quote.
-STRING : '"' (ESC|~'"')* '"';
+// A lower or uppercase letter or underscore, followed by none or more
+// alphanumeric characters or underscore.
+IDENTIFIER : APLHA ALPHANUM*;
 
-// A rule that is marked as a fragment will NOT have a token created for it. So anything matching the rules above
-// will create a token in the output, but something matching the ESC rule below will only be used locally in the scope
-// of this file. Any rule that should not generate an output token should be preceded by the fragment keyword.
-// ESC matches either a pair of characters representing a newline ('\' and 'n') or a pair of characters representing
-// a double quote ('\' and '"'). HINT: there are many other characters that should be escaped - think of how you need
-// to write them in strings in languages like Java.
+// Fragments to hold certain sets of characters.
 fragment
-ESC :  '\\' ('n'|'"');
+ESC :  '\\' ('n' | 't' | '\\' | '"' | '\'');
+
+fragment
+ALPHANUM : (APLHA | DIGIT);
+
+fragment
+APLHA : [a-zA-Z_];
+
+fragment
+DIGIT : [0-9];
+
+fragment
+HEXDIGIT: (DIGIT | [a-fA-F]);
+
+fragment
+DECLITERAL : DIGIT DIGIT*;
+
+fragment
+HEXLITERAL : '0x' HEXDIGIT HEXDIGIT*;
+
+fragment
+NONWORD: [\u0020-\u0021\u0023-\u0026\u0028-\u002F\u003A-\u0040\u005B\u005D\u005E\u0060\u007B-\u007E];
+
+fragment
+CHAR : (ESC | ALPHANUM | NONWORD);
