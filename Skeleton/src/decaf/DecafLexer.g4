@@ -1,6 +1,6 @@
 lexer grammar DecafLexer;
 @headers {
-  import java.util.*;  
+import java.util.List;  
 }
 // Keywords:
 CLASS     : 'class';
@@ -24,12 +24,25 @@ LPAREN : '(';
 RPAREN : ')';
 
 // Operators
-ARITHMATIC  : ('+' | '-' | '/' | '*' | '%');
-COMPARISON  : ('==' | '!=' | '<' | '>' | '<=' | '>=');
-LOGIC       : ('&&' | '||' | '~');
+ADDITION    : '+';
+MINUS : '-';
+DIVISION    : '/';
+MULTIPLY    : '*';
+MODULO      : '%';
+EQUAL       : '==';
+NOTEQUAL    : '!=';
+LESSTHAN    : '<';
+GREATERTHAN : '>';
+LSSTHNEQTO  : '<=';
+GRTTHNEQTO  : '>=';
+LOGICAND    : '&&';
+LOGICOR     : '||';
+LOGICNOT    : '!';
 ASSIGNMENT  : '=';
+ASSIGNMENTP : '+=';
+ASSIGNMENTS : '-=';
 COMMA       : ',';
-LINEEND     : ';';
+EOL         : ';';
 
 // Any number in the range zero to nine.
 INTLITERAL : (DECLITERAL | HEXLITERAL);
@@ -43,8 +56,8 @@ CHARLITERAL : '\'' CHAR '\'';
 // Any number of characters enclosed within double quotes.
 STRINGLITERAL : '"' CHAR* '"';
 
-// This rule simply ignores any space or newline characters.
-WS_ : (' ' | '\n' ) -> skip;
+// This rule simply ignores any space, newline, tab, linefeed or empty quotes.
+WS_ : (' ' | '\n' | '\t' | '\f' | '\'\'' ) -> skip;
 
 // This rule ignores comments ('//' to the end of the line).
 SL_COMMENT : '//' (~'\n')* '\n' -> skip;
@@ -52,6 +65,24 @@ SL_COMMENT : '//' (~'\n')* '\n' -> skip;
 // A lower or uppercase letter or underscore, followed by none or more
 // alphanumeric characters or underscore.
 IDENTIFIER : APLHA ALPHANUM*;
+
+fragment
+LITERAL: (INTLITERAL | CHARLITERAL | BOOLEANLITERAL);
+
+fragment
+BIN_OP: (ARITH_OP | REL_OP | EQ_OP | COND_OP);
+
+fragment
+ARITH_OP: (ADDITION | MINUS | MULTIPLY | DIVISION | MODULO);
+
+fragment
+REL_OP: (LESSTHAN | GREATERTHAN | LSSTHNEQTO | GRTTHNEQTO);
+
+fragment
+EQ_OP: (EQUAL | NOTEQUAL);
+
+fragment
+COND_OP: (LOGICAND | LOGICOR);
 
 // Fragments to hold certain sets of characters.
 fragment

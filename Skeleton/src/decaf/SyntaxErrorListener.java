@@ -28,25 +28,29 @@ class SyntaxErrorListener extends BaseErrorListener {
          int line, int charPositionInLine, String msg, RecognitionException e) {
       
       // System.out.println();
+      // System.out.println("inFile: " + inFile);
+
       // System.out.println("Offending Symbol: " + offendingSymbol);
       // System.out.println("Line: " + line);
       // System.out.println("Char Position in Line: " + charPositionInLine);
       // System.out.println("Message: " + msg);
 
       // System.out.println("-- Recognizer<?,?> --");
+      // DecafLexer lexer = (DecafLexer) recognizer;
       // System.out.println(recognizer);
-      // System.out.println("Parse/Lex Info: " + recognizer.getParseInfo());
-      // System.out.println("Vocabulary: " + recognizer.getVocabulary());
-      // System.out.println("Char index: " + recognizer.getCharIndex());
-      // System.out.println("Char in line: " + recognizer.getCharPositionInLine());
-      // System.out.println("Line: " + recognizer.getLine());
-      // System.out.println("Token : " + recognizer.getToken());
-      // System.out.println("Type: " + recognizer.getType());
+      // System.out.println("Parse/Lex Info: " + lexer.getParseInfo());
+      // System.out.println("Vocabulary: " + lexer.getVocabulary());
+      // System.out.println("Char index: " + lexer.getCharIndex());
+      // System.out.println("Char in line: " + lexer.getCharPositionInLine());
+      // System.out.println("Line: " + lexer.getLine());
+      // System.out.println("Token : " + lexer.getToken());
+      // System.out.println("Type: " + lexer.getType());
+      // System.out.println("Text: " + lexer.getText());
 
       // System.out.println("-- RecognitionException --");
       // System.out.println(e);
       // System.out.println("Context: " + e.getCtx());
-      // System.out.println("Expected Tokens: " + e.getExpectedTokens());
+      // // System.out.println("Expected Tokens: " + e.getExpectedTokens());
       // System.out.println("Input Stream: " + e.getInputStream());
       // System.out.println("Offending State: " + e.getOffendingState());
       // System.out.println("Offending Token: " + e.getOffendingToken());

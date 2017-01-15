@@ -1,19 +1,53 @@
-/*
- * A VERY minimal skeleton for your parser, provided by Emma Norling.
- *
- * Your parser should use the tokens provided by your lexer in rules.
- * Even if your lexer appeared to be working perfectly for stage 1,
- * you might need to adjust some of those rules when you implement
- * your parser.
- *
- * Remember to provide documentation too (including replacing this
- * documentation).
- *
- */
+
 parser grammar DecafParser;
 options { tokenVocab = DecafLexer; }
 
-// This rule says that a program consists of the tokens CLASS ID LCURLY RCURLY EOF nothing more nothing less,
-// in exactly that order. However obviously something (quite a lot of something) needs to go between the curly
-// brackets. You need to write the rules (based on the provided grammar) to capture this.
-program: CLASS ID LCURLY RCURLY EOF;
+
+program: CLASS IDENTIFIER LCURLY field_decl* method_decl* RCURLY EOF;
+
+field_decl: type ((IDENTIFIER | IDENTIFIER LBRACE INTLITERAL RBRACE) COMMA*)+ EOL;
+
+method_decl:
+  (type | VOID) IDENTIFIER LPAREN ((type IDENTIFIER COMMA*)+)? RPAREN block;
+
+block: LCURLY var_decl* statement* RCURLY;
+
+var_decl: type (IDENTIFIER COMMA*)+ EOL;
+
+type: (INT | BOOLEAN);
+
+statement : 
+          ( location assign_op expr EOL
+          | method_call EOL
+          | IF LPAREN expr RPAREN block (ELSE block)?
+          | FOR IDENTIFIER ASSIGNMENT expr COMMA expr block
+          | RETURN expr EOL
+          | BREAK EOL
+          | CONTINUE EOL
+          | block
+          );
+
+assign_op: (ASSIGNMENT | ASSIGNMENTP | ASSIGNMENTS);
+
+method_call : 
+            ( method_name LPAREN (expr COMMA)? RPAREN
+            | CALLOUT LPAREN STRINGLITERAL (COMMA* (callout_arg COMMA)+)? RPAREN);
+
+callout_arg: (expr | STRINGLITERAL);
+
+method_name: IDENTIFIER;
+
+location: (IDENTIFIER | IDENTIFIER LBRACE expr RBRACE);
+
+expr:   MINUS expr 
+    |   expr (MULTIPLY | DIVISION | MODULO) expr
+    |   expr (ADDITION | MINUS) expr
+    |   expr (LESSTHAN | GREATERTHAN | LSSTHNEQTO | GRTTHNEQTO) expr
+    |   expr (EQUAL | NOTEQUAL) expr
+    |   expr LOGICAND expr
+    |   expr LOGICOR expr
+    |   location
+    |   method_call
+    |   (INTLITERAL | CHARLITERAL | BOOLEANLITERAL)
+    |   LPAREN expr RPAREN
+    ;

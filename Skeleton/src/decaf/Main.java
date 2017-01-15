@@ -15,6 +15,7 @@ import java.nio.file.*;
 import java.nio.charset.Charset;
 import java.util.stream.*;
 import java.util.*;
+import javax.swing.*;
 
 /**
  * Main compiler class. Contains all logic for scanning, parsing and compiling
@@ -84,7 +85,6 @@ public class Main {
         put(lexer.BOOLEANLITERAL, "BOOLEANLITERAL ");
       }};
 
-      // Print out the HashMap if debugging enabled.
       if (CLI.debug) System.out.println("Printable types (ID,Name): " 
                                           + printableTypes.toString());
 
@@ -103,8 +103,6 @@ public class Main {
       if (CLI.debug)
         System.out.println("Out-file: ../output/myoutput/" + CLI.outfile);
 
-      // Token token2 = lexer.emit();
-      // System.out.println("Token2: " + token2);
       // lexer inherites nextToken() from org.antlr.v4.runtime.TokenSource.
       // This provides the next Token(type, text, line, col) object from the
       // stream.
@@ -138,8 +136,11 @@ public class Main {
    */
   private static void parse() {
     CommonTokenStream tokens = new CommonTokenStream(lexer);
-    DecafParser parser = new DecafParser (tokens);
+    DecafParser parser = new DecafParser(tokens);
     ParseTree tree = parser.program();
+    System.out.println(tree.toStringTree(parser));
+    JPanel newPanel = new JPanel();
+    TreeViewer treeViewer = new TreeViewer(parser.getRuleNames(), tree);
     if (CLI.debug) {
       TreePrinterListener listener = new TreePrinterListener(parser);
       ParseTreeWalker.DEFAULT.walk(listener, tree);
@@ -147,4 +148,10 @@ public class Main {
       System.out.println(formatted);
     }
   }
+
+  // Parse tree:
+  // Terminals at the leaves, non terminals at the interior nodes
+  // In order traversal of the tree is the original input
+  // Shows associations of operations that the input string doesn't.
+  public static void check() {}
 }
