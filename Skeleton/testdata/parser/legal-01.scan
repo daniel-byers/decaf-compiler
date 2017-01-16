@@ -1,7 +1,0 @@
-1 class
-1 IDENTIFIER Program
-1 {
-2 int
-2 IDENTIFIER i
-2 ;
-3 }

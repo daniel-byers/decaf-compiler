@@ -6,9 +6,12 @@ package decaf;
 
 import java.io.*;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.DiagnosticErrorListener;
+import org.antlr.v4.runtime.ANTLRErrorListener;
 import org.antlr.v4.runtime.tree.*;
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.atn.PredictionMode;
 import java6G6Z1010.tools.CLI.*;
 import java.util.Hashtable;
 import java.nio.file.*;
@@ -18,65 +21,89 @@ import java.util.*;
 import javax.swing.*;
 
 /**
- * Main compiler class. Contains all logic for scanning, parsing and compiling
- * Decaf source files.
+ * Main compiler class. Contains all logic for scanning, parsing and compiling Decaf source files.
  */
 public class Main {
   // Declare class variables to hold important objects.
   private static DecafLexer lexer;
+  private static DecafParser parser;
   private static Map<Integer, String> printableTypes;
+  private static ANTLRErrorListener[] _extraErrorListeners;
 
   /**
-   * Main entry point for the compiler. Controls flow of process through scan,
-   * parse, and compile stages.
+   * Empty constructor for default usage.
+   */
+  public Main () {}
+
+  /**
+   * Constructor used for adding extra listeners. Will help later in testing as we can inject a
+   * listener that doesn't write out to a file or to stdout; removing the need for I/O.
+   * @param listeners Array of listeners to add to the Lexer and Parser.
+   */
+  public Main(ANTLRErrorListener[] listeners) { _extraErrorListeners = listeners; }
+
+  /**
+   * Main entry point for the compiler. Controls flow of process through scan, parse, and compile
+   * stages.
    * @param args  Supplied by command line and determined by user.
    */
   public static void main(String[] args) {
-    // Call setup method. Used instead of constructor as command line arguments
-    // are sent to the Main object's main() method, instead of passed into the
-    // Main object upon construction.
+    // Call setup method. Used in lieu of constructor as command line arguments are sent to the Main
+    // object's main() method, instead of passed into the Main object upon construction.
     setUp(args);
 
-    // If 'scan' or nothing was supplied as the parameter to -target 
-    if (CLI.target == CLI.SCAN || CLI.target == CLI.DEFAULT) { scan(); }
-
-    // If 'parse' was supplied as the parameter to -target
-    else if (CLI.target == CLI.PARSE) { parse(); }
+    if      (CLI.target == CLI.SCAN
+            || CLI.target == CLI.DEFAULT)  scan();
+    else if (CLI.target == CLI.PARSE)      parse();
   }
 
   /**
-  * Sets up CLI object that encapsulates the information required for the 
-  * process of scanning input to be tokenised. This object also holds
-  * information about command line arguments so that the necessary logic can be
-  * written for them. inputStream is initialised to either the input from a
-  * file or prompted from stdin. The ANTLRInputStream is instantiated from the
-  * inputStream, and DecafLexar is instantiated from the ANTLRInputStream.
-  * Finialising the setup, the printableTypes HashMap is populated with the 
-  * types of tokens that are to be printed alongside the text.
+  * Sets up the CLI object that encapsulates the information captured from the command line, the
+  * DecafLexar that is instantiated from the input stream, and the DecafParser which is in turn
+  * instantiated with the tokens output from the Lexer.
+  * The extra error listeners that were injected during construction of this object are registered
+  * with the Lexer and Parser.
   * @param args The command-line arguments supplied from main().
   */
   private static void setUp(String[] args) {
     try {
-      // The first argument into parse is the arguments supplied from the
-      // command line, the second is an empty array of optional arguments which
-      // aren't used.
-      CLI.parse(args, new String[0]); 
-      
+      // The first argument into parse is the arguments supplied from the command line, the second
+      // is an empty array of optional arguments which aren't used.
+      CLI.parse(args, new String[0]);
+ 
       InputStream inputStream = args.length == 0 ?
         System.in : new java.io.FileInputStream(CLI.infile);
 
+      // Retrieve input from whatever source was decided.
       ANTLRInputStream antlrIOS = new ANTLRInputStream(inputStream);
 
       // This class file is generated at runtime by ANTLR.
       lexer = new DecafLexer(antlrIOS);
 
-      // remove the console listener from the lexer
-      lexer.removeErrorListeners();
+      // Retrieve tokens from Lexer.
+      CommonTokenStream tokens = new CommonTokenStream(lexer);
 
-      // Add custom ErrorListener to lexer
+      // // This class file is generated at runtime by ANTLR.
+      parser = new DecafParser(tokens);
+
+      // Remove the ConsoleListener from the Lexer and add custom ErrorListener.
+      lexer.removeErrorListeners();
       lexer.addErrorListener(new SyntaxErrorListener(CLI.infile, CLI.outfile));
 
-      // (ID, Name). Lookup done by Token type.
+      // Add DiagnosticErrorListener to Parser and set ambiguity reporting to high.
+      parser.addErrorListener(new DiagnosticErrorListener());
+      parser.getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);
+
+      // Add all custom error listeners to the Lexer and Parser.
+      if (_extraErrorListeners != null) {
+        for(ANTLRErrorListener listener : _extraErrorListeners) {
+          lexer.addErrorListener(listener);
+          parser.addErrorListener(listener);
+        }
+      }
+
+      // (ID, Name). Select types of tokens that are to be printed alongside the text during error
+      // reporting. Lookup done by Token type.
       printableTypes = new HashMap<Integer, String>() {{
         put(lexer.IDENTIFIER, "IDENTIFIER ");
         put(lexer.INTLITERAL, "INTLITERAL ");
@@ -85,73 +112,71 @@ public class Main {
         put(lexer.BOOLEANLITERAL, "BOOLEANLITERAL ");
       }};
 
-      if (CLI.debug) System.out.println("Printable types (ID,Name): " 
-                                          + printableTypes.toString());
+      if (CLI.debug) { 
+        System.out.println("In file: " + CLI.infile);
+        System.out.println("Out file: " + CLI.outfile);
+        System.out.println("Printable types (ID,Name): " + printableTypes.toString());
+      }
 
     } catch(Exception e) { System.out.println(CLI.infile + " " + e); }
   }
 
   /**
-   * Iterates over the tokenised input building an iterable String object for
-   * each token that can be written as a line of text to a file. This text is in
-   * the form:   line number (optional)type text
-   *
+   * Iterates over the tokenised input building an iterable String object for each token that can be
+   * written as a line of text to a file. This text is in the form: line number (optional)type text
    */
   private static void scan() {
-    try {
-      // Print out the outfile name if debugging enabled.
+    // Lexer provides the next Token(type, text, line, col) object from the stream.
+    for (Token token = lexer.nextToken(); token.getType() != Token.EOF; token = lexer.nextToken()) {
+
       if (CLI.debug)
-        System.out.println("Out-file: ../output/myoutput/" + CLI.outfile);
+        System.out.println(token.getLine() + ":" + token.getCharPositionInLine() + "\t" +
+          printableTypes.getOrDefault(token.getType(), "") + " " + token.getText());
 
-      // lexer inherites nextToken() from org.antlr.v4.runtime.TokenSource.
-      // This provides the next Token(type, text, line, col) object from the
-      // stream.
-      for (Token token = lexer.nextToken(); token.getType() != Token.EOF; 
-            token = lexer.nextToken()) {
-
-        if (CLI.debug)
-          System.out.println(
-            token.getLine() + ":" + token.getCharPositionInLine() + "\t" +
-            printableTypes.getOrDefault(token.getType(), "")
-            + " " + token.getText() );
-
-        // Build the token into a iterable list that can be written to a file.
-        List<String> lines = Arrays.asList(token.getLine() + " " + 
-          printableTypes.getOrDefault(token.getType(), "") +
-          token.getText());
-
-        // Requires an Iterable<> type object to write to File. Will not
-        // accept a String alone.
-        Files.write(
-          Paths.get(CLI.outfile),
-            lines, Charset.forName("UTF-8"),
-            StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-      }
-    // Print any errors to stdout.
-    } catch(Exception e) { System.out.println(CLI.infile + " " + e); }
+      printToFile(Arrays.asList(token.getLine() + " " + 
+        printableTypes.getOrDefault(token.getType(), "") + token.getText()));
+    }
   }
 
   /**
-   * Stage Two.
+   * Builds a ParseTree from the tokens scanned by the Lexer.
+   * @return ParseTree The Abstract Parse Tree (APT) generated from the tokens.
    */
-  private static void parse() {
-    CommonTokenStream tokens = new CommonTokenStream(lexer);
-    DecafParser parser = new DecafParser(tokens);
+  private static ParseTree parse() {
+    // Returns the Context object for "program" (defined in DecafParser.g4)
     ParseTree tree = parser.program();
-    System.out.println(tree.toStringTree(parser));
-    JPanel newPanel = new JPanel();
-    TreeViewer treeViewer = new TreeViewer(parser.getRuleNames(), tree);
-    if (CLI.debug) {
-      TreePrinterListener listener = new TreePrinterListener(parser);
-      ParseTreeWalker.DEFAULT.walk(listener, tree);
-      String formatted = listener.toString();
-      System.out.println(formatted);
-    }
+
+    // Creates the object that will listen as the tree is traversed.
+    TreePrinterListener listener = new TreePrinterListener(parser);
+
+    // Walks the tree, building the string representation of it.
+    ParseTreeWalker.DEFAULT.walk(listener, tree);
+    
+    printToFile(Arrays.asList(listener.toString()));
+
+    // TODO: Look into printing the Tree visually.
+    // System.out.println(tree.toStringTree(parser));
+    // JPanel newPanel = new JPanel();
+    // TreeViewer treeViewer = new TreeViewer(parser.getRuleNames(), tree);
+    if (CLI.debug) System.out.println(listener.toString());
+
+    return tree;
   }
 
   // Parse tree:
   // Terminals at the leaves, non terminals at the interior nodes
   // In order traversal of the tree is the original input
   // Shows associations of operations that the input string doesn't.
-  public static void check() {}
+  private static void check() {}
+
+  /**
+   * Requires an Iterable<> type object to write to File. Will not accept a String alone.
+   * @param lines List of lines to be written to the file.
+   */
+  private static void printToFile(List<String> lines) {
+    try {
+      Files.write(Paths.get(CLI.outfile), lines, Charset.forName("UTF-8"),
+          StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    } catch(Exception e) { System.out.println("I/O Error: " + e); }
+  }
 }

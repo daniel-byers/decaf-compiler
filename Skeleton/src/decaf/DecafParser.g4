@@ -8,7 +8,7 @@ program: CLASS IDENTIFIER LCURLY field_decl* method_decl* RCURLY EOF;
 field_decl: type ((IDENTIFIER | IDENTIFIER LBRACE INTLITERAL RBRACE) COMMA*)+ EOL;
 
 method_decl:
-  (type | VOID) IDENTIFIER LPAREN ((type IDENTIFIER COMMA*)+)? RPAREN block;
+  (type | VOID) IDENTIFIER LPAREN ((type IDENTIFIER COMMA?)+)? RPAREN block;
 
 block: LCURLY var_decl* statement* RCURLY;
 
@@ -30,8 +30,8 @@ statement :
 assign_op: (ASSIGNMENT | ASSIGNMENTP | ASSIGNMENTS);
 
 method_call : 
-            ( method_name LPAREN (expr COMMA)? RPAREN
-            | CALLOUT LPAREN STRINGLITERAL (COMMA* (callout_arg COMMA)+)? RPAREN);
+            ( method_name LPAREN ((expr COMMA?)+)? RPAREN
+            | CALLOUT LPAREN STRINGLITERAL (COMMA (callout_arg COMMA?)+)? RPAREN);
 
 callout_arg: (expr | STRINGLITERAL);
 
