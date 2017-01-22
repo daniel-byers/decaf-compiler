@@ -1,5 +1,8 @@
 /**
  * @author Daniel Byers | 13121312
+ * 
+ * This code builds on examples provided by the following book:
+ * Parr, Terence (2012). The Definitive ANTLR 4 Reference. USA: The Pragmatic Bookshelf. 322.
  */
 
 package decaf;
@@ -181,17 +184,20 @@ public class Main {
   // Listeners are good, but they don't allow us to control the walk of the tree, to do this, you would
   // use the visitor pattern.
   // Also, could use tree annotation.
-  // Two phases, first we define all the symbols, then we make sure they exist. This allows forward
-  // reference. Symbol table will be implemented as a stack of scopes controlled by listeners.
-  // The reason I have decided to use listeners is because so much effort has been put into making
-  // ANTLR robust, and so it feels foolish to rewrite boilerplate code when it's already been done the
-  // "best" way possible.
   // Enter Rule: push scope
   // Exit Rule: pop scope
   // Parse tree:
   // Terminals at the leaves, non terminals at the interior nodes
   // In order traversal of the tree is the original input
   // Shows associations of operations that the input string doesn't.
+  /**
+   * Traverses the tree twice; first we define all the Symbols and then we make sure they are valid. 
+   * This allows forward reference. Symbol table will be implemented as a stack of scopes and then
+   * semantic checking will be delegated to a pair of listeners.
+   * The reason I have decided to use listeners is because so much effort has been put into making
+   * ANTLR robust, and so it feels foolish to rewrite boilerplate code when it's already been
+   * implemented in an intelligent fashion.
+   */
   private static void check(ParseTree tree) {
     DefinitionPassListener definitionPass = new DefinitionPassListener();
     ParseTreeWalker.DEFAULT.walk(definitionPass, tree);

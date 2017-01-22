@@ -1,28 +1,48 @@
+/**
+ * @author Daniel Byers | 13121312
+ * 
+ * This code builds on examples provided by the following book:
+ * Parr, Terence (2012). The Definitive ANTLR 4 Reference. USA: The Pragmatic Bookshelf. 322.
+ */
+
 package decaf;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 public abstract class BaseScope implements Scope {
-    Scope enclosingScope; // null if global (outermost) scope
-    Map<String, Symbol> symbols = new LinkedHashMap<String, Symbol>();
+  public BaseScope(Scope enclosingScope) { this.enclosingScope = enclosingScope;  }
 
-    public BaseScope(Scope enclosingScope) { this.enclosingScope = enclosingScope;  }
+  Scope enclosingScope;
+  Map<String, Symbol> symbols = new LinkedHashMap<String, Symbol>();
 
-    public Symbol resolve(String name) {
-        Symbol s = symbols.get(name);
-        if ( s!=null ) return s;
-        // if not here, check any enclosing scope
-        if ( enclosingScope != null ) return enclosingScope.resolve(name);
-        return null; // not found
-    }
+  /**
+   * @param String The name of the Symbol to search for.
+   * @return Returns a Symbol representing the argument, determined by name.
+   */
+  public Symbol resolve(String name) {
+    Symbol symbol = symbols.get(name);
+    if      (symbol != null)                return symbol;
+    else if (getEnclosingScope() != null)   return getEnclosingScope().resolve(name);
+    else                                    return null;
+  }
 
-    public void define(Symbol sym) {
-        symbols.put(sym.name, sym);
-        sym.scope = this; // track the scope in each symbol
-    }
+  /**
+   * Adds the arguments to the scope, and sets the scope on the argument symbol.
+   * @param Symbol The Symbol of an argument passed into the method.
+   */
+  public void define(Symbol symbol) {
+    symbols.put(symbol.name, symbol);
+    symbol.scope = this;
+  }
 
-    public Scope getEnclosingScope() { return enclosingScope; }
+  /**
+   * @return The scope within which this Symbol resides.
+   */
+  public Scope getEnclosingScope() { return enclosingScope; }
 
-    public String toString() { return getScopeName()+":"+symbols.keySet().toString(); }
+  /**
+   * @return A String representation of the Symbol in a printable format.
+   */
+  public String toString() { return getScopeName() + ":" + symbols.keySet().toString(); }
 }
