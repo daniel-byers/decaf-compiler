@@ -92,9 +92,6 @@ class DefinitionPassListener extends DecafParserBaseListener {
     // 0, so this iterator starts at index 1 until the end; capturing only the argument types.
     ListIterator indentifierTypesItr = ctx.type().listIterator(1);
 
-    // TODO:  Check could be done here: if list lengths aren't the same then there is extraneous or
-    //  --    missing operands. 
-
     // Iterates through both lists simultaneously, casting the return of .next() to the appropriate
     // type for creating a VariableSymbol object.
     while(indentifierListItr.hasNext() && indentifierTypesItr.hasNext()) {
@@ -108,9 +105,6 @@ class DefinitionPassListener extends DecafParserBaseListener {
       // Add that symbol to the methods scope
       newMethodScope.define(newVariableSymbol);
     }
-
-    // TODO:  Check could be done here: if either list has remaining items, there is extraneous or
-    //  --    missing operands. 
 
     // Add the new MethodSymbol to the current scope.
     currentScope.define(newMethodScope);

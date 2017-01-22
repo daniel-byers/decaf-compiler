@@ -7,14 +7,14 @@
 
 package decaf;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 
 public abstract class BaseScope implements Scope {
   public BaseScope(Scope enclosingScope) { this.enclosingScope = enclosingScope;  }
 
   Scope enclosingScope;
   Map<String, Symbol> symbols = new LinkedHashMap<String, Symbol>();
+  Map<String, Symbol> duplicateSymbols = new LinkedHashMap<>();
 
   /**
    * @param String The name of the Symbol to search for.
@@ -28,12 +28,20 @@ public abstract class BaseScope implements Scope {
   }
 
   /**
-   * Adds the arguments to the scope, and sets the scope on the argument symbol.
+   * Adds the Symbols to the scope or marks them as duplicated.
+   * Also sets the scope on the Symbol so it can track where it belongs.
    * @param Symbol The Symbol of an argument passed into the method.
    */
   public void define(Symbol symbol) {
-    symbols.put(symbol.name, symbol);
+    if    (symbols.containsKey(symbol.name))  duplicateSymbols.put(symbol.name, symbol);
+    else                                      symbols.put(symbol.name, symbol);
     symbol.scope = this;
+  }
+
+  public List<String> getDuplicates() { 
+    List<String> newList = new ArrayList<>();
+    newList.addAll(duplicateSymbols.keySet());
+    return newList;
   }
 
   /**
@@ -45,4 +53,5 @@ public abstract class BaseScope implements Scope {
    * @return A String representation of the Symbol in a printable format.
    */
   public String toString() { return getScopeName() + ":" + symbols.keySet().toString(); }
+
 }
