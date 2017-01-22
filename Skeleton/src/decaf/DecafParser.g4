@@ -3,51 +3,58 @@ parser grammar DecafParser;
 options { tokenVocab = DecafLexer; }
 
 
-program: CLASS IDENTIFIER LCURLY field_decl* method_decl* RCURLY EOF;
+program: CLASS IDENTIFIER LCURLY fieldDecl* methodDecl* RCURLY EOF;
 
-field_decl: type ((IDENTIFIER | IDENTIFIER LBRACE INTLITERAL RBRACE) COMMA*)+ EOL;
+fieldDecl: type ((IDENTIFIER | IDENTIFIER LBRACE INTLITERAL RBRACE) COMMA?)+ EOL;
 
-method_decl:
-  (type | VOID) IDENTIFIER LPAREN ((type IDENTIFIER COMMA?)+)? RPAREN block;
+methodDecl:
+  (type | VOID) methodName LPAREN ((type IDENTIFIER COMMA?)+)? RPAREN block;
 
-block: LCURLY var_decl* statement* RCURLY;
+// Variables have to be declared first?
+block: LCURLY varDecl* statement* RCURLY;
 
-var_decl: type (IDENTIFIER COMMA*)+ EOL;
+varDecl: type (IDENTIFIER COMMA?)+ EOL;
 
 type: (INT | BOOLEAN);
 
 statement : 
-          ( location assign_op expr EOL
-          | method_call EOL
+          ( location assignOp expr EOL
+          | methodCall EOL
           | IF LPAREN expr RPAREN block (ELSE block)?
           | FOR IDENTIFIER ASSIGNMENT expr COMMA expr block
-          | RETURN expr EOL
+          | RETURN expr? EOL
           | BREAK EOL
           | CONTINUE EOL
           | block
           );
 
-assign_op: (ASSIGNMENT | ASSIGNMENTP | ASSIGNMENTS);
+assignOp: (ASSIGNMENT | ASSIGNMENTP | ASSIGNMENTS);
 
-method_call : 
-            ( method_name LPAREN ((expr COMMA?)+)? RPAREN
-            | CALLOUT LPAREN STRINGLITERAL (COMMA (callout_arg COMMA?)+)? RPAREN);
+methodCall : 
+            ( methodName LPAREN ((expr COMMA?)+)? RPAREN
+            | CALLOUT LPAREN STRINGLITERAL (COMMA (calloutArg COMMA?)+)? RPAREN);
 
-callout_arg: (expr | STRINGLITERAL);
+calloutArg: (expr | STRINGLITERAL);
 
-method_name: IDENTIFIER;
+// This is a "named indentifier" so a method is generated to access it through
+// the MethodDeclContext object.
+methodName: IDENTIFIER;
 
 location: (IDENTIFIER | IDENTIFIER LBRACE expr RBRACE);
 
+// MINUS causes an ambguity check to be raised because it's not clear
+// if "x-foo()"" is "- foo()" or "-foo()". 
+// ANTLR has a "longest-match" rule that is used in these situations.
 expr:   MINUS expr 
+    |   NOT expr
     |   expr (MULTIPLY | DIVISION | MODULO) expr
     |   expr (ADDITION | MINUS) expr
     |   expr (LESSTHAN | GREATERTHAN | LSSTHNEQTO | GRTTHNEQTO) expr
     |   expr (EQUAL | NOTEQUAL) expr
-    |   expr LOGICAND expr
-    |   expr LOGICOR expr
+    |   expr AND expr
+    |   expr OR expr
     |   location
-    |   method_call
-    |   (INTLITERAL | CHARLITERAL | BOOLEANLITERAL)
+    |   methodCall
+    |   (INTLITERAL | CHARLITERAL | BOOLEANLITERAL | STRINGLITERAL)
     |   LPAREN expr RPAREN
     ;

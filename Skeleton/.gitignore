@@ -3,10 +3,4 @@
 /tmp
 /Compiler.jar
 *.sh
-src/decaf/DecafParser.g4.bak
-src/decaf/DecafParserBaseListener.java
-src/decaf/DecafParserListener.java
-src/decaf/DecafLexer.java
-src/decaf/DecafLexer.tokens
-src/decaf/DecafParser.tokens
-src/decaf/DecafParser.java
+my_test*

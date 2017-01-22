@@ -1,7 +1,5 @@
 lexer grammar DecafLexer;
-@headers {
-import java.util.List;  
-}
+
 // Keywords:
 CLASS     : 'class';
 BOOLEAN   : 'boolean';
@@ -22,27 +20,32 @@ LBRACE : '[';
 RBRACE : ']';
 LPAREN : '(';
 RPAREN : ')';
+COMMA  : ',';
+EOL    : ';';
+PERIOD : '.';
 
 // Operators
 ADDITION    : '+';
-MINUS : '-';
+MINUS       : '-';
 DIVISION    : '/';
 MULTIPLY    : '*';
 MODULO      : '%';
+
+ASSIGNMENT  : '=';
+ASSIGNMENTP : '+=';
+ASSIGNMENTS : '-=';
+
 EQUAL       : '==';
 NOTEQUAL    : '!=';
 LESSTHAN    : '<';
 GREATERTHAN : '>';
 LSSTHNEQTO  : '<=';
 GRTTHNEQTO  : '>=';
-LOGICAND    : '&&';
-LOGICOR     : '||';
-LOGICNOT    : '!';
-ASSIGNMENT  : '=';
-ASSIGNMENTP : '+=';
-ASSIGNMENTS : '-=';
-COMMA       : ',';
-EOL         : ';';
+
+AND         : '&&';
+OR          : '||';
+NOT         : 'not' | '!';
+
 
 // Any number in the range zero to nine.
 INTLITERAL : (DECLITERAL | HEXLITERAL);
@@ -67,7 +70,7 @@ SL_COMMENT : '//' (~'\n')* '\n' -> skip;
 IDENTIFIER : APLHA ALPHANUM*;
 
 fragment
-LITERAL: (INTLITERAL | CHARLITERAL | BOOLEANLITERAL);
+LITERAL: (INTLITERAL | CHARLITERAL | BOOLEANLITERAL | STRINGLITERAL);
 
 fragment
 BIN_OP: (ARITH_OP | REL_OP | EQ_OP | COND_OP);
@@ -82,7 +85,7 @@ fragment
 EQ_OP: (EQUAL | NOTEQUAL);
 
 fragment
-COND_OP: (LOGICAND | LOGICOR);
+COND_OP: (AND | OR);
 
 // Fragments to hold certain sets of characters.
 fragment
@@ -106,7 +109,7 @@ DECLITERAL : DIGIT DIGIT*;
 fragment
 HEXLITERAL : '0x' HEXDIGIT HEXDIGIT*;
 
-fragment
+//fragment
 NONWORD: [\u0020-\u0021\u0023-\u0026\u0028-\u002F\u003A-\u0040\u005B\u005D\u005E\u0060\u007B-\u007E];
 
 fragment
