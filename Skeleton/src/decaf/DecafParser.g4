@@ -2,19 +2,31 @@
 parser grammar DecafParser;
 options { tokenVocab = DecafLexer; }
 
-
+// top level. The context of the whole Decaf application.
 program: CLASS IDENTIFIER LCURLY fieldDecl* methodDecl* RCURLY EOF;
 
-fieldDecl: type ((IDENTIFIER | IDENTIFIER LBRACE INTLITERAL RBRACE) COMMA?)+ EOL;
+// global scope. Arrays are only allowed there!
+// int a; int a[10]; int a, b; int a[1], b, c;
+fieldDecl : type (IDENTIFIER | arrayDecl) (COMMA (IDENTIFIER | arrayDecl))* EOL;
+
+// This is a "named indentifier" so a method is generated to access it through
+// the FieldDeclContext object.
+arrayDecl: IDENTIFIER LBRACE INTLITERAL RBRACE;
 
 methodDecl:
-  (type | VOID) methodName LPAREN ((type IDENTIFIER COMMA?)+)? RPAREN block;
+  (type | VOID) methodName LPAREN ((type IDENTIFIER) (COMMA type IDENTIFIER)*)? RPAREN block;
 
-// Variables have to be declared first?
+// This is a "named indentifier" so a method is generated to access it through
+// the MethodDeclContext object.
+methodName: IDENTIFIER;
+
+// Variables have to be declared first.
 block: LCURLY varDecl* statement* RCURLY;
 
-varDecl: type (IDENTIFIER COMMA?)+ EOL;
+// local scope
+varDecl: type IDENTIFIER (COMMA IDENTIFIER)* EOL;
 
+// basic types.
 type: (INT | BOOLEAN);
 
 statement : 
@@ -31,14 +43,10 @@ statement :
 assignOp: (ASSIGNMENT | ASSIGNMENTP | ASSIGNMENTS);
 
 methodCall : 
-            ( methodName LPAREN ((expr COMMA?)+)? RPAREN
-            | CALLOUT LPAREN STRINGLITERAL (COMMA (calloutArg COMMA?)+)? RPAREN);
+            ( methodName LPAREN (expr (COMMA expr)*)? RPAREN
+            | CALLOUT LPAREN STRINGLITERAL (COMMA calloutArg (COMMA calloutArg)*)? RPAREN);
 
 calloutArg: (expr | STRINGLITERAL);
-
-// This is a "named indentifier" so a method is generated to access it through
-// the MethodDeclContext object.
-methodName: IDENTIFIER;
 
 location: (IDENTIFIER | IDENTIFIER LBRACE expr RBRACE);
 
