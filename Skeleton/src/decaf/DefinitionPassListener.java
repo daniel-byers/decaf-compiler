@@ -178,6 +178,10 @@ class DefinitionPassListener extends DecafParserBaseListener {
     else if (ctx.STRINGLITERAL()  != null)  exprTypes.put(ctx, Symbol.Type.INVALID);
     else if (ctx.CHARLITERAL()    != null)  exprTypes.put(ctx, Symbol.Type.INVALID);
     else if (ctx.methodCall()     != null)  {
+
+      // TODO: Will error if method hasn't been defined before it is called. This is actually part
+      //  --   of the implementation designed for the future; ie. forward referencing isn't allowed.
+
       Symbol method = currentScope.resolve(ctx.methodCall().methodName().getText());
       exprTypes.put(ctx, method.type);
     }
@@ -221,25 +225,24 @@ class DefinitionPassListener extends DecafParserBaseListener {
         exprTypes.put(ctx, Symbol.Type.INVALID);
         // System.out.println("Error: bad operand for binary operation");
     }
-    System.out.println(exprTypes.get(ctx));
   }
 
   public boolean arithmaticBinaryOperation(DecafParser.ExprContext ctx) {
-    return  ctx.MULTIPLY()  != null
-        ||  ctx.DIVISION()  != null
-        ||  ctx.MODULO()    != null
-        ||  ctx.ADDITION()  != null
-        ||  ctx.MINUS()     != null;
+    return  ctx.MULTIPLY()    != null
+        ||  ctx.DIVISION()    != null
+        ||  ctx.MODULO()      != null
+        ||  ctx.ADDITION()    != null
+        ||  ctx.MINUS()       != null
+        ||  ctx.LESSTHAN()    != null
+        ||  ctx.GREATERTHAN() != null
+        ||  ctx.LSSTHNEQTO()  != null
+        ||  ctx.GRTTHNEQTO()  != null;
   }
 
   public boolean booleanBinaryOperation(DecafParser.ExprContext ctx) {
-    return  ctx.LESSTHAN()    != null
-        ||  ctx.GREATERTHAN() != null
-        ||  ctx.LSSTHNEQTO()  != null
-        ||  ctx.GRTTHNEQTO()  != null
-        ||  ctx.EQUAL()       != null
-        ||  ctx.NOTEQUAL()    != null
-        ||  ctx.AND()         != null
-        ||  ctx.OR()          != null;
+    return  ctx.EQUAL()     != null
+        ||  ctx.NOTEQUAL()  != null
+        ||  ctx.AND()       != null
+        ||  ctx.OR()        != null;
   }
 }

@@ -10,6 +10,7 @@ package decaf;
 import org.antlr.v4.runtime.tree.*;
 import org.antlr.v4.runtime.*;
 import java.util.*;
+import java6G6Z1010.tools.CLI.*;
 
 class ReferencePassListener extends DecafParserBaseListener {
   public ReferencePassListener(GlobalScope globalScope, ParseTreeProperty<Scope> scopes,
@@ -41,8 +42,7 @@ class ReferencePassListener extends DecafParserBaseListener {
   }
 
   public void enterArrayDecl(DecafParser.ArrayDeclContext ctx) {
-    // 4. The int_literal in an array declaration must be greater than 0 (negatives fail Parse).
-    System.out.println(currentScope + " " + globalScope);
+    // 4. The int_literal in an array declaration must be greater than 0 (negatives fail to parse).
     if (Integer.parseInt(ctx.INTLITERAL().getText()) == 0)
       System.out.println("Error: array " + ctx.IDENTIFIER() + " cannot have a size of zero");
   }
@@ -51,7 +51,7 @@ class ReferencePassListener extends DecafParserBaseListener {
     currentScope = scopes.get(ctx);
   }
 
-  public void exitMethodnDecl(DecafParser.MethodDeclContext ctx) {
+  public void exitMethodDecl(DecafParser.MethodDeclContext ctx) {
     currentScope = currentScope.getEnclosingScope();
   }
 
@@ -64,21 +64,132 @@ class ReferencePassListener extends DecafParserBaseListener {
   }
 
   public void enterLocation(DecafParser.LocationContext ctx) {
-    // 2. No identifier is used before it is declared.
     String locationName = ctx.IDENTIFIER().getText();
-    if (currentScope.resolve(locationName) == null)
-      System.out.println("Error: variable " + locationName + " cannot be found.");    
+    Symbol location = currentScope.resolve(locationName);
+
+
+    // 9. An id used as a location must name a declared local/global variable or formal parameter.
+    if (location == null)
+      System.out.println("Error: variable " + locationName + " cannot be found.");
+    else {
+      // 10. For all locations of the form id[expr];
+      if (ctx.LBRACE() != null && ctx.RBRACE() != null) {
+        // a) id must be an array variable,
+        if (!(location instanceof ArrayVariableSymbol))
+          System.out.println("Error: " + locationName + " is not an array.");
+        else {
+          Symbol.Type exprType = exprTypes.get(ctx.expr());
+          // b) the type of <expr> must be int.
+          if (exprType != Symbol.Type.INT)
+            System.out.println("Error: array index must be an integer.");
+        }
+      }
+    }
+  }
+
+  public void exitStatement(DecafParser.StatementContext ctx) {
+    if (ctx.RETURN() != null) {
+      // Recursive ascent of the tree from this node is necessary to locate the method in which this
+      // return statement has been defined. However, the stack of Scopes cannot be modified directly
+      // for this, so a shadow branch is built from this node up to the root that reflects the state
+      // of the stack of scopes.
+      Scope shadowScope = currentScope;
+      while (shadowScope != null ) {
+        // We want to stop in the scope before global, which will be the method scope that contains
+        // the RETURN statement.
+        String nextScopeName = shadowScope.getEnclosingScope().getScopeName();
+        if    (nextScopeName == "globals")  break;
+        else                                shadowScope = shadowScope.getEnclosingScope();
+      }
+      // This scope is a MethodSymbol object so also stores information about the return type of the
+      // method.
+      MethodSymbol method = (MethodSymbol) shadowScope;
+
+      // Therefore, a checks can be made to see if the method is supposed to return a value or not.
+
+      // 7. A return statement must not have a return value unless it appears in the body of a
+      // method that is declared to return a value.
+      if (method.type == Symbol.Type.VOID && ctx.expr(0) != null)
+        System.out.println("Error: method " + method.name + " cannot return an expression");
+      else if (method.type != Symbol.Type.VOID) {
+        if (ctx.expr(0) == null)
+          System.out.println("Error: method " + method.name + " return missing.");
+        // 8. The expression in a return statement must have the same type as the declared result
+        // type of the enclosing method definition.
+        else {
+          Symbol.Type exprType = exprTypes.get(ctx.expr(0));
+          if (method.type != exprType)
+            System.out.println("Error: " + method.name + " returned value must match return type.");
+        }
+      } 
+    }
+    else if (ctx.IF() != null) {
+      Symbol.Type exprType = exprTypes.get(ctx.expr(0));
+      // 11. The expr in an if statement must have type boolean.
+      if (exprType != Symbol.Type.BOOLEAN)
+        System.out.println("Error: if expression must be a boolean");
+    }
+    else if (ctx.assignOp() != null) {
+      String locationName = ctx.location().IDENTIFIER().getText();
+      Symbol location = (Symbol) currentScope.resolve(locationName);
+      Symbol.Type exprType = exprTypes.get(ctx.expr(0));
+
+      if (ctx.assignOp().ASSIGNMENT() != null) {
+
+        //  15. The location and expr in an assignment: `location = expr`, must have the same type.
+        if (location.type != exprType)
+          System.out.println("Error: incompatible types: " + exprType + " cannot be converted to " +
+          location.type);
+      }
+      else if (ctx.assignOp().ASSIGNMENTP() != null || ctx.assignOp().ASSIGNMENTS() != null) {
+        // 16. The location and the expr in an incrementing assignment: `location += expr`
+        // and decrementing assignment: `location -= expr`, must be of type int.
+        if (location.type != Symbol.Type.INT || exprType != Symbol.Type.INT)
+          System.out.println(
+            "Error: in an incrementing/decrementing assignment, operands must be of type INT; " +
+            location.type + " & " + exprType + " given.");
+      }
+    }
+    else if (ctx.FOR() != null) {
+      Symbol.Type expr0Type = exprTypes.get(ctx.expr(0));
+      Symbol.Type expr1Type = exprTypes.get(ctx.expr(1));
+
+      // 17. The initial expr and the ending expr of for must have type int.
+      if (expr0Type != Symbol.Type.INT || expr1Type != Symbol.Type.INT)
+        System.out.println("Error: both expressions in for loop must be of type INT");
+    }
+    else if (ctx.BREAK() != null || ctx.CONTINUE() != null) {
+      // All break or continue statements will be in a block of some form; if they're not, they will
+      // fail the parsing.
+      DecafParser.BlockContext block = (DecafParser.BlockContext) ctx.parent;
+
+      // 18. All break and continue statements must be contained within the body of a for.
+
+      // A for loop is always inside a statement, if the parent of the block node isn't a statement,
+      // then the break/continue is not in the right place.
+      if  (!(block.parent instanceof DecafParser.StatementContext))
+        System.out.println("Error: break and continue must be inside a for loop");
+      else {
+        // An empty block is also a statement but not a valid place for a break or continue token.
+        // So, if the statement that contains the break/continue doesn't also contain a FOR then it
+        // is invalid.
+        DecafParser.StatementContext statement = (DecafParser.StatementContext) block.parent;
+        if (statement.FOR() == null)
+          System.out.println("Error: break and continue must be inside a for loop");
+      }
+    }
   }
 
   public void enterMethodCall(DecafParser.MethodCallContext ctx) {
-    System.out.println("ref-"+currentScope);
+
     // 2. No identifier is used before it is declared.
     String methodName = ctx.methodName().IDENTIFIER().getText();
     MethodSymbol method = (MethodSymbol) currentScope.resolve(methodName);
     if (method == null) {
       System.out.println("Error: method " + methodName + " cannot be found.");
 
-    // iterate over method's symbols (params) and compare their types to given types of supplied.
+    // 5. The number and types of arguments in a method call must be the same as the number
+    // and  types of the formals, i.e., the signatures must be identical
     } else {
 
       List<DecafParser.ExprContext> suppliedParameters = ctx.expr();
@@ -92,117 +203,119 @@ class ReferencePassListener extends DecafParserBaseListener {
           ListIterator formalParametersItr = paramList.listIterator();
           ListIterator suppliedParametersItr = suppliedParameters.listIterator();
 
-          List<Symbol.Type> suppliedParametersTypes = new ArrayList<>();
-          while (suppliedParametersItr.hasNext()) {
+          // Iterate over Method's Symbol list (formal parameters) and compare their types 
+          // to given types of supplied arguments that are stored in the ParseTreeProperty object.
+          while (formalParametersItr.hasNext() && suppliedParametersItr.hasNext()) { 
+            VariableSymbol formalParameter = (VariableSymbol) formalParametersItr.next();
+
             DecafParser.ExprContext suppliedParameter =
               (DecafParser.ExprContext) suppliedParametersItr.next();
 
-            // if (exprTypes.get(suppliedParameter.expr(0)) != null)
-            //   System.out.println("hurray!");
-            
-            if (arithmaticBinaryOperation(suppliedParameter)) {
-              DecafParser.ExprContext lExp = suppliedParameter.expr(0);
-              DecafParser.ExprContext rExp = suppliedParameter.expr(1);
-              Symbol.Type lExpType = getBinaryOperatorExprType(lExp);
-              Symbol.Type rExpType = getBinaryOperatorExprType(rExp);
-              // System.out.println("lExpType: " + lExpType);
-              // System.out.println("rExpType: " + rExpType);
-              if (lExpType != Symbol.Type.INT || rExpType != Symbol.Type.INT)
-                System.out.println("Error: bad operand for +");
-              else
-                suppliedParametersTypes.add(Symbol.Type.INT);
-            } 
-            else if (suppliedParameter.INTLITERAL() != null) {
-              suppliedParametersTypes.add(Symbol.Type.INT);
-            }
-            else if (booleanBinaryOperation(suppliedParameter)) {
-              DecafParser.ExprContext lExp = suppliedParameter.expr(0);
-              DecafParser.ExprContext rExp = suppliedParameter.expr(1);
-              Symbol.Type lExpType = getBinaryOperatorExprType(lExp);
-              Symbol.Type rExpType = getBinaryOperatorExprType(rExp);
-              // System.out.println("lExpType: " + lExpType);
-              // System.out.println("rExpType: " + rExpType);
-              if (lExpType != Symbol.Type.BOOLEAN || rExpType != Symbol.Type.BOOLEAN)
-                System.out.println("Error: bad operand for binary operation");
-              else
-                suppliedParametersTypes.add(Symbol.Type.BOOLEAN);
-            }
-          }
-          System.out.println(suppliedParametersTypes);
+            Symbol.Type suppliedParameterType = exprTypes.get(suppliedParameter);
 
-          // Now we have a list of the types in the order they appear in the list.
-          ListIterator suppliedParametersTypesItr = suppliedParametersTypes.listIterator();
-
-          while (formalParametersItr.hasNext() && suppliedParametersTypesItr.hasNext()) { 
-            VariableSymbol formalParameter = (VariableSymbol) formalParametersItr.next();
-            Symbol.Type suppliedParameterType = (Symbol.Type) suppliedParametersTypesItr.next();
+            if (CLI.debug)
+              System.out.println("[supplied: " + suppliedParameterType + "] " +
+                "[formal  : " + formalParameter.type + "]");
+          
             if (suppliedParameterType != formalParameter.type) 
               System.out.println("Error: type mismatch; " + suppliedParameterType +
                 " given, " + formalParameter.type + " expected.");
           }
-          
         }
-      } else {
-        System.out.println("Error: method " + methodName +
-          " takes " + numOfParamsRequired + " parameters. " + numOfParamsSupplied + " given.");
-      }
-
-
-      // if (method.formalParameters != null) {
-
-      //   if (ctx.expr() != null) {
-          
-      //     for (DecafParser.ExprContext exp : suppliedParametersItr)
-          
-
-
-      //   } else {
-      //   }
-      // }
+      } else  System.out.println("Error: method " + methodName + " expects " + 
+                numOfParamsRequired + " parameters. " + numOfParamsSupplied + " given.");
     }
   }
 
-          // System.out.println("ref-|"+currentScope+"|"+globalScope);
-      // supplied param will be
-
-  public boolean arithmaticBinaryOperation(DecafParser.ExprContext suppliedParameter) {
-    return  suppliedParameter.MULTIPLY()    != null
-        ||  suppliedParameter.DIVISION()    != null
-        ||  suppliedParameter.MODULO()      != null
-        ||  suppliedParameter.ADDITION()    != null
-        ||  suppliedParameter.MINUS()       != null;
-  }
-
-  public boolean booleanBinaryOperation(DecafParser.ExprContext suppliedParameter) {
-    return  suppliedParameter.LESSTHAN()    != null
-        ||  suppliedParameter.GREATERTHAN() != null
-        ||  suppliedParameter.LSSTHNEQTO()  != null
-        ||  suppliedParameter.GRTTHNEQTO()  != null
-        ||  suppliedParameter.EQUAL()       != null
-        ||  suppliedParameter.NOTEQUAL()    != null
-        ||  suppliedParameter.AND()         != null
-        ||  suppliedParameter.OR()          != null;
-  }
-  public Symbol.Type getBinaryOperatorExprType(DecafParser.ExprContext ctx) {
-    if (ctx.location() != null) {
-      String idName = ctx.location().IDENTIFIER().getText();
-      Symbol identifier = currentScope.resolve(idName);
-      Symbol.Type type = identifier.type;
-      return type;
+  public void exitExpr(DecafParser.ExprContext ctx) {
+    if (ctx.methodCall() != null) {
+      String methodName = ctx.methodCall().methodName().IDENTIFIER().getText();
+      MethodSymbol method = (MethodSymbol) currentScope.resolve(methodName);
+      // 6. If a method call is used as an expression, the method must return a result.
+      if (method.type == Symbol.Type.VOID)
+        System.out.println("Error: method: " + methodName + " is used as an expression, but has " 
+          + method.type + " return type.");
     }
-    else if (ctx.INTLITERAL() != null) {
-      Token token = ctx.INTLITERAL().getSymbol();
-      Symbol.Type type = Symbol.getType(token.getType());
-      return type;
-    } 
-    else if (ctx.BOOLEANLITERAL() != null) {
-      Token token = ctx.BOOLEANLITERAL().getSymbol();
-      Symbol.Type type = Symbol.getType(token.getType());
-      return type;
-    } else {
-      return null;
+    else if (arithmaticBinaryOperation(ctx)) {
+      Symbol.Type lExpType = exprTypes.get(ctx.expr(0));
+      Symbol.Type rExpType = exprTypes.get(ctx.expr(1));
+
+      // 12. The operands of arith_ops and rel_ops must have type int.
+      if (lExpType != Symbol.Type.INT || rExpType != Symbol.Type.INT)
+        System.out.println("Error: arithmatic operands must be of type integer.");
+    }
+    else if (equalityBinaryOperations(ctx)) {
+      Symbol.Type lExpType = exprTypes.get(ctx.expr(0));
+      Symbol.Type rExpType = exprTypes.get(ctx.expr(1));
+
+      // 13. The operands of eq_ops must have the same type, either int or boolean.
+      if (lExpType != rExpType)
+        System.out.println("Error: boolean operands must be the same type.");
+
+      if (lExpType != Symbol.Type.INT && lExpType != Symbol.Type.BOOLEAN 
+      ||  rExpType != Symbol.Type.INT && rExpType != Symbol.Type.BOOLEAN)
+          System.out.println("Error: equality operands must be of type boolean or integer.");
+    }
+    else if (conditionalBinaryOperation(ctx)) {
+      Symbol.Type lExpType = exprTypes.get(ctx.expr(0));
+      Symbol.Type rExpType = exprTypes.get(ctx.expr(1));
+
+      // 14. The operands of <ond_ops and the operand of logical not (!) must have type boolean.
+      if (lExpType != Symbol.Type.BOOLEAN || rExpType != Symbol.Type.BOOLEAN)
+        System.out.println("Error: arithmatic operands must be of type integer.");
+    }
+    else if (ctx.NOT() != null) {
+      Symbol.Type exprType = exprTypes.get(ctx.expr(0));
+      // 14. The operands of <ond_ops and the operand of logical not (!) must have type boolean.
+      if (exprType != Symbol.Type.BOOLEAN)
+        System.out.println("Error: not ( ! ) operand must be of type boolean.");
     }
   }
+
+  // these are ints
+  public boolean arithmaticBinaryOperation(DecafParser.ExprContext ctx) {
+    return  ctx.MULTIPLY()    != null
+        ||  ctx.DIVISION()    != null
+        ||  ctx.MODULO()      != null
+        ||  ctx.ADDITION()    != null
+        ||  ctx.MINUS()       != null
+        ||  ctx.LESSTHAN()    != null
+        ||  ctx.GREATERTHAN() != null
+        ||  ctx.LSSTHNEQTO()  != null
+        ||  ctx.GRTTHNEQTO()  != null;
+  }
+
+  // these can be ints or bools
+  public boolean equalityBinaryOperations(DecafParser.ExprContext ctx) {
+    return  ctx.EQUAL()      != null
+        ||  ctx.NOTEQUAL()  != null;
+  }
+
+  // these must be booleans
+  public boolean conditionalBinaryOperation(DecafParser.ExprContext ctx) {
+    return  ctx.AND() != null
+        ||  ctx.OR()  != null;
+  }
+  // public Symbol.Type getBinaryOperatorExprType(DecafParser.ExprContext ctx) {
+  //   if (ctx.location() != null) {
+  //     String idName = ctx.location().IDENTIFIER().getText();
+  //     Symbol identifier = currentScope.resolve(idName);
+  //     Symbol.Type type = identifier.type;
+  //     return type;
+  //   }
+  //   else if (ctx.INTLITERAL() != null) {
+  //     Token token = ctx.INTLITERAL().getSymbol();
+  //     Symbol.Type type = Symbol.getType(token.getType());
+  //     return type;
+  //   } 
+  //   else if (ctx.BOOLEANLITERAL() != null) {
+  //     Token token = ctx.BOOLEANLITERAL().getSymbol();
+  //     Symbol.Type type = Symbol.getType(token.getType());
+  //     return type;
+  //   } else {
+  //     return null;
+  //   }
+  // }
   
 }
 

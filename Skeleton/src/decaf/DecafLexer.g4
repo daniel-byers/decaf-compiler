@@ -70,7 +70,7 @@ STRINGLITERAL : '"' CHAR* '"';
 WS_ : (' ' | '\n' | '\t' | '\f' | '\'\'' ) -> skip;
 
 // This rule ignores comments ('//' to the end of the line).
-SL_COMMENT : '//' (~'\n')* '\n' -> skip;
+SL_COMMENT : '//' (~'\n')* ('\n'|EOF) -> skip;
 
 // A lower or uppercase letter or underscore, followed by none or more
 // alphanumeric characters or underscore.
