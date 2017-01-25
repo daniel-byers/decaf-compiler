@@ -8,15 +8,19 @@
 package decaf;
 
 import org.antlr.v4.runtime.tree.*;
+import org.antlr.v4.runtime.*;
 import java.util.*;
 
 class ReferencePassListener extends DecafParserBaseListener {
-  public ReferencePassListener(GlobalScope globalScope, ParseTreeProperty<Scope> scopes) {
+  public ReferencePassListener(GlobalScope globalScope, ParseTreeProperty<Scope> scopes,
+    ParseTreeProperty<Symbol.Type> exprTypes) {
     this.globalScope = globalScope;
     this.scopes = scopes;
+    this.exprTypes = exprTypes;
   } 
 
   ParseTreeProperty<Scope> scopes = new ParseTreeProperty<>();
+  ParseTreeProperty<Symbol.Type> exprTypes = new ParseTreeProperty<>();
   GlobalScope globalScope;
   Scope currentScope;
 
@@ -31,10 +35,16 @@ class ReferencePassListener extends DecafParserBaseListener {
     MethodSymbol mainMethod = (MethodSymbol) currentScope.resolve("main");
     if (mainMethod == null) {
       System.out.println("Error: cannot find main()");
-    } else if (mainMethod.formalParameters != null) {
+    } else if (!mainMethod.formalParameters.isEmpty()) {
       System.out.println("Error: main() cannot take parameters");
     }
+  }
 
+  public void enterArrayDecl(DecafParser.ArrayDeclContext ctx) {
+    // 4. The int_literal in an array declaration must be greater than 0 (negatives fail Parse).
+    System.out.println(currentScope + " " + globalScope);
+    if (Integer.parseInt(ctx.INTLITERAL().getText()) == 0)
+      System.out.println("Error: array " + ctx.IDENTIFIER() + " cannot have a size of zero");
   }
 
   public void enterMethodDecl(DecafParser.MethodDeclContext ctx) {
@@ -53,13 +63,145 @@ class ReferencePassListener extends DecafParserBaseListener {
     currentScope = currentScope.getEnclosingScope();
   }
 
-  public void enterStatement(DecafParser.StatementContext ctx) {
+  public void enterLocation(DecafParser.LocationContext ctx) {
     // 2. No identifier is used before it is declared.
-    String locationName = ctx.location().IDENTIFIER().getText();
+    String locationName = ctx.IDENTIFIER().getText();
     if (currentScope.resolve(locationName) == null)
-      System.out.println("Error: variable " + locationName + " cannot be found.");
+      System.out.println("Error: variable " + locationName + " cannot be found.");    
+  }
 
-    
+  public void enterMethodCall(DecafParser.MethodCallContext ctx) {
+    System.out.println("ref-"+currentScope);
+    // 2. No identifier is used before it is declared.
+    String methodName = ctx.methodName().IDENTIFIER().getText();
+    MethodSymbol method = (MethodSymbol) currentScope.resolve(methodName);
+    if (method == null) {
+      System.out.println("Error: method " + methodName + " cannot be found.");
+
+    // iterate over method's symbols (params) and compare their types to given types of supplied.
+    } else {
+
+      List<DecafParser.ExprContext> suppliedParameters = ctx.expr();
+      
+      int numOfParamsRequired = method.formalParameters.size();
+      int numOfParamsSupplied = suppliedParameters == null ? 0 : suppliedParameters.size();
+
+      if (numOfParamsSupplied == numOfParamsRequired) {
+        if (numOfParamsRequired != 0) {
+          List<Symbol> paramList = new ArrayList<>(method.formalParameters.values());
+          ListIterator formalParametersItr = paramList.listIterator();
+          ListIterator suppliedParametersItr = suppliedParameters.listIterator();
+
+          List<Symbol.Type> suppliedParametersTypes = new ArrayList<>();
+          while (suppliedParametersItr.hasNext()) {
+            DecafParser.ExprContext suppliedParameter =
+              (DecafParser.ExprContext) suppliedParametersItr.next();
+
+            // if (exprTypes.get(suppliedParameter.expr(0)) != null)
+            //   System.out.println("hurray!");
+            
+            if (arithmaticBinaryOperation(suppliedParameter)) {
+              DecafParser.ExprContext lExp = suppliedParameter.expr(0);
+              DecafParser.ExprContext rExp = suppliedParameter.expr(1);
+              Symbol.Type lExpType = getBinaryOperatorExprType(lExp);
+              Symbol.Type rExpType = getBinaryOperatorExprType(rExp);
+              // System.out.println("lExpType: " + lExpType);
+              // System.out.println("rExpType: " + rExpType);
+              if (lExpType != Symbol.Type.INT || rExpType != Symbol.Type.INT)
+                System.out.println("Error: bad operand for +");
+              else
+                suppliedParametersTypes.add(Symbol.Type.INT);
+            } 
+            else if (suppliedParameter.INTLITERAL() != null) {
+              suppliedParametersTypes.add(Symbol.Type.INT);
+            }
+            else if (booleanBinaryOperation(suppliedParameter)) {
+              DecafParser.ExprContext lExp = suppliedParameter.expr(0);
+              DecafParser.ExprContext rExp = suppliedParameter.expr(1);
+              Symbol.Type lExpType = getBinaryOperatorExprType(lExp);
+              Symbol.Type rExpType = getBinaryOperatorExprType(rExp);
+              // System.out.println("lExpType: " + lExpType);
+              // System.out.println("rExpType: " + rExpType);
+              if (lExpType != Symbol.Type.BOOLEAN || rExpType != Symbol.Type.BOOLEAN)
+                System.out.println("Error: bad operand for binary operation");
+              else
+                suppliedParametersTypes.add(Symbol.Type.BOOLEAN);
+            }
+          }
+          System.out.println(suppliedParametersTypes);
+
+          // Now we have a list of the types in the order they appear in the list.
+          ListIterator suppliedParametersTypesItr = suppliedParametersTypes.listIterator();
+
+          while (formalParametersItr.hasNext() && suppliedParametersTypesItr.hasNext()) { 
+            VariableSymbol formalParameter = (VariableSymbol) formalParametersItr.next();
+            Symbol.Type suppliedParameterType = (Symbol.Type) suppliedParametersTypesItr.next();
+            if (suppliedParameterType != formalParameter.type) 
+              System.out.println("Error: type mismatch; " + suppliedParameterType +
+                " given, " + formalParameter.type + " expected.");
+          }
+          
+        }
+      } else {
+        System.out.println("Error: method " + methodName +
+          " takes " + numOfParamsRequired + " parameters. " + numOfParamsSupplied + " given.");
+      }
+
+
+      // if (method.formalParameters != null) {
+
+      //   if (ctx.expr() != null) {
+          
+      //     for (DecafParser.ExprContext exp : suppliedParametersItr)
+          
+
+
+      //   } else {
+      //   }
+      // }
+    }
+  }
+
+          // System.out.println("ref-|"+currentScope+"|"+globalScope);
+      // supplied param will be
+
+  public boolean arithmaticBinaryOperation(DecafParser.ExprContext suppliedParameter) {
+    return  suppliedParameter.MULTIPLY()    != null
+        ||  suppliedParameter.DIVISION()    != null
+        ||  suppliedParameter.MODULO()      != null
+        ||  suppliedParameter.ADDITION()    != null
+        ||  suppliedParameter.MINUS()       != null;
+  }
+
+  public boolean booleanBinaryOperation(DecafParser.ExprContext suppliedParameter) {
+    return  suppliedParameter.LESSTHAN()    != null
+        ||  suppliedParameter.GREATERTHAN() != null
+        ||  suppliedParameter.LSSTHNEQTO()  != null
+        ||  suppliedParameter.GRTTHNEQTO()  != null
+        ||  suppliedParameter.EQUAL()       != null
+        ||  suppliedParameter.NOTEQUAL()    != null
+        ||  suppliedParameter.AND()         != null
+        ||  suppliedParameter.OR()          != null;
+  }
+  public Symbol.Type getBinaryOperatorExprType(DecafParser.ExprContext ctx) {
+    if (ctx.location() != null) {
+      String idName = ctx.location().IDENTIFIER().getText();
+      Symbol identifier = currentScope.resolve(idName);
+      Symbol.Type type = identifier.type;
+      return type;
+    }
+    else if (ctx.INTLITERAL() != null) {
+      Token token = ctx.INTLITERAL().getSymbol();
+      Symbol.Type type = Symbol.getType(token.getType());
+      return type;
+    } 
+    else if (ctx.BOOLEANLITERAL() != null) {
+      Token token = ctx.BOOLEANLITERAL().getSymbol();
+      Symbol.Type type = Symbol.getType(token.getType());
+      return type;
+    } else {
+      return null;
+    }
   }
   
 }
