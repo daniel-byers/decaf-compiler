@@ -29,7 +29,6 @@ LPAREN : '(';
 RPAREN : ')';
 COMMA  : ',';
 EOL    : ';';
-PERIOD : '.';
 
 // Operators
 ADDITION    : '+';

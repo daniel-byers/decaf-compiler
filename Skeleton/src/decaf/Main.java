@@ -112,9 +112,10 @@ public class Main {
       lexer.addErrorListener(new SyntaxErrorListener(CLI.infile, CLI.outfile));
 
       // Add DiagnosticErrorListener to Parser and set ambiguity reporting to high.
-      parser.addErrorListener(new DiagnosticErrorListener());
-      if (CLI.debug)
+      if (CLI.debug) {
+        parser.addErrorListener(new DiagnosticErrorListener());
         parser.getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);
+      }
 
       // Add all custom error listeners to the Lexer and Parser.
       if (_extraErrorListeners != null) {
@@ -178,11 +179,20 @@ public class Main {
 
     if (CLI.debug) {
       System.out.println(listener.toString());
+      
       JFrame frame = new JFrame("Tree");
       frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+      
+      JPanel container = new JPanel();
+      JScrollPane scrPane = new JScrollPane(container);
+
+      frame.getContentPane().add(scrPane);
+      // container.setLayout(new GridBagLayout());
+
       TreeViewer treeViewer = new TreeViewer(Arrays.asList(parser.getRuleNames()), tree);
       treeViewer.setScale(3);
-      frame.getContentPane().add(treeViewer);
+      container.add(treeViewer);
+
       frame.pack();
       frame.setVisible(true);
     }
@@ -213,12 +223,12 @@ public class Main {
    * implemented in an intelligent fashion.
    */
   protected static void check(ParseTree tree) {
-    DefinitionPassListener definitionPass = new DefinitionPassListener();
-    ParseTreeWalker.DEFAULT.walk(definitionPass, tree);
+    SemanticRuleManager manager = new SemanticRuleManager();
+    ParseTreeWalker.DEFAULT.walk(manager, tree);
 
-    ReferencePassListener referencePass = new ReferencePassListener(definitionPass.globalScope, 
-      definitionPass.scopes, definitionPass.exprTypes);
-    ParseTreeWalker.DEFAULT.walk(referencePass, tree);
+    // ReferencePassListener referencePass = new ReferencePassListener(definitionPass.globalScope, 
+    //   definitionPass.scopes, definitionPass.exprTypes);
+    // ParseTreeWalker.DEFAULT.walk(referencePass, tree);
   }
 
   /**

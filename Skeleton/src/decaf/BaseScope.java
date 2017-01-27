@@ -27,6 +27,10 @@ public abstract class BaseScope implements Scope {
     else                                    return null;
   }
 
+  public Symbol resolveLocal(String name) {
+    return symbols.get(name);
+  }
+
   /**
    * Adds the Symbols to the scope or marks them as duplicated.
    * Also sets the scope on the Symbol so it can track where it belongs.

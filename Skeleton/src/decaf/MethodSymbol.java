@@ -30,6 +30,8 @@ public class MethodSymbol extends Symbol implements Scope {
     else                                    return null;
   }
 
+  public Symbol resolveLocal(String name) { return formalParameters.get(name); }
+
   /**
    * Adds the arguments to the scope, and sets the scope on the argument symbol.
    * @param Symbol The Symbol of an argument passed into the method.
