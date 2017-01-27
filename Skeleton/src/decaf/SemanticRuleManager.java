@@ -14,11 +14,13 @@ import java6G6Z1010.tools.CLI.*;
 import java.util.*;
 
 class SemanticRuleManager extends DecafParserBaseListener {
+  public SemanticRuleManager(ErrorHandler errorHandler) { this.errorHandler = errorHandler; }
 
   ParseTreeProperty<Scope> scopes = new ParseTreeProperty<>();
   ParseTreeProperty<Symbol.Type> exprTypes = new ParseTreeProperty<>();
   GlobalScope globalScope;
   Scope currentScope;
+  ErrorHandler errorHandler;
 
   /**
    * Creates the global scope.
@@ -39,13 +41,12 @@ class SemanticRuleManager extends DecafParserBaseListener {
 
     // 3. The program contains a definition for a method called main that takes no parameters.
     MethodSymbol mainMethod = (MethodSymbol) currentScope.resolve("main");
-    if (mainMethod == null) {
-      System.out.println("Error: cannot find main()");
-    } else if (!mainMethod.formalParameters.isEmpty()) {
-      System.out.println("Error: main() cannot take parameters");
-    }
-    if (CLI.debug) System.out.println(globalScope);
+    if (mainMethod == null)
+      errorHandler.handleError("cannot find main()", ctx.start);
+    else if (!mainMethod.formalParameters.isEmpty())
+      errorHandler.handleError("main() cannot take parameters", ctx.start); // <<<<<<<<<<<<<<<<<<<<< TODO: locate main token.
 
+    if (CLI.debug) System.out.println(globalScope);
   }
 
   /**
@@ -75,19 +76,20 @@ class SemanticRuleManager extends DecafParserBaseListener {
       }
       // 1. No identifier is declared twice in the same scope.
       else
-        System.out.println("Error: " + identifierName + " has already been defined.");
+        errorHandler.handleError("variable '" + identifierName + "' has already been defined.",
+          ctx.start);
     }
 
     ListIterator arrayIndentifierListItr = ctx.arrayDecl().listIterator();
     while (arrayIndentifierListItr.hasNext()) {
       // Retrieve the next item from the iterator and cast it to it's appropriate type.
-      DecafParser.ArrayDeclContext arr_dec =
+      DecafParser.ArrayDeclContext arrayDecl =
         (DecafParser.ArrayDeclContext) arrayIndentifierListItr.next();
 
       // Creates new ArrayVariableSymbol that holds the additional size field required by arrays.
       ArrayVariableSymbol newArrayVariableSymbol = new ArrayVariableSymbol(
-        arr_dec.IDENTIFIER().getText(), Symbol.getType(ctx.type().start.getType()), 
-        Integer.parseInt(arr_dec.INTLITERAL().getText()));
+        arrayDecl.IDENTIFIER().getText(), Symbol.getType(ctx.type().start.getType()), 
+        Integer.parseInt(arrayDecl.INTLITERAL().getText()));
       
       // Add that symbol to the current scope.
       currentScope.define(newArrayVariableSymbol);      
@@ -97,7 +99,8 @@ class SemanticRuleManager extends DecafParserBaseListener {
   public void enterArrayDecl(DecafParser.ArrayDeclContext ctx) {
     // 4. The int_literal in an array declaration must be greater than 0 (negatives fail to parse).
     if (Integer.parseInt(ctx.INTLITERAL().getText()) == 0)
-      System.out.println("Error: array " + ctx.IDENTIFIER() + " cannot have a size of zero");
+      errorHandler.handleError("array '" + ctx.IDENTIFIER() + "' cannot have a size of zero",
+        ctx.start);
   }
 
   /**
@@ -106,40 +109,51 @@ class SemanticRuleManager extends DecafParserBaseListener {
    * @param ctx The MethodDeclContext object defined in DecafParser. Generated at compile time.
    */
   public void enterMethodDecl(DecafParser.MethodDeclContext ctx) {
+    String methodName = ctx.methodName().IDENTIFIER().getText();
 
-    // Create a MethodSymbol to hold the name, return type, and a pointer to the enclosing scope.
-    MethodSymbol newMethodScope = new MethodSymbol(ctx.methodName().IDENTIFIER().getText(), 
-      Symbol.getType(ctx.type().get(0).start.getType()), currentScope);
+    // check to see if method has already been defined.
+    if (currentScope.resolve(methodName) == null) {
 
-    // There is an IDENTIFIER for each argument name passed into a method, 
-    ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
+      // Create a MethodSymbol to hold the name, return type, and a pointer to the enclosing scope.
+      MethodSymbol newMethodScope = new MethodSymbol(ctx.methodName().IDENTIFIER().getText(), 
+        Symbol.getType(ctx.type().get(0).start.getType()), currentScope);
 
-    // There is a type for all arguments, but also the method return type. Return type is in index
-    // 0, so this iterator starts at index 1 until the end; capturing only the argument types.
-    ListIterator indentifierTypesItr = ctx.type().listIterator(1);
+      // There is an IDENTIFIER for each argument name passed into a method, 
+      ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
 
-    // Iterates through both lists simultaneously, casting the return of .next() to the appropriate
-    // type for creating a VariableSymbol object.
-    while(indentifierListItr.hasNext() && indentifierTypesItr.hasNext()) {
+      // There is a type for all arguments, but also the method return type. Return type is in index
+      // 0, so this iterator starts at index 1 until the end; capturing only the argument types.
+      ListIterator indentifierTypesItr = ctx.type().listIterator(1);
 
-      // Create a VariableSymbol for each of the method's arguments
-      VariableSymbol newVariableSymbol = new VariableSymbol(
-        ((TerminalNode) indentifierListItr.next()).getText(),
-        Symbol.getType(((DecafParser.TypeContext) indentifierTypesItr.next()).start.getType())
-      );
+      // Iterates through both lists simultaneously, casting the return of .next() to the 
+      // appropriate type for creating a VariableSymbol object.
+      while(indentifierListItr.hasNext() && indentifierTypesItr.hasNext()) {
 
-      // Add that symbol to the methods scope
-      newMethodScope.define(newVariableSymbol);
+        // Create a VariableSymbol for each of the method's arguments
+        VariableSymbol newVariableSymbol = new VariableSymbol(
+          ((TerminalNode) indentifierListItr.next()).getText(),
+          Symbol.getType(((DecafParser.TypeContext) indentifierTypesItr.next()).start.getType())
+        );
+
+        // Add that symbol to the methods scope
+        newMethodScope.define(newVariableSymbol);
+      }
+
+      // Add the new MethodSymbol to the current scope.
+      currentScope.define(newMethodScope);
+      
+      // Map the new scope to the current ParseTree node in the stack of scopes.
+      scopes.put(ctx, newMethodScope);
+
+      // Set working scope to that of the method
+      currentScope = newMethodScope;
+    } else {
+      // FOUND THE BUG! If a method exists then no new scope is pushed but one is still popped..
+      // Create a new pseudo-Scope to counter. This will be popped immediately so has no impact.
+      errorHandler.handleError("method '" + methodName + "' has already been defined.",
+        ctx.methodName().start);
+      currentScope = new LocalScope(currentScope);
     }
-
-    // Add the new MethodSymbol to the current scope.
-    currentScope.define(newMethodScope);
-
-    // Map the new scope to the current ParseTree node in the stack of scopes.
-    scopes.put(ctx, newMethodScope);
-
-    // Set working scope to that of the method
-    currentScope = newMethodScope;
   }
 
   /**
@@ -213,7 +227,8 @@ class SemanticRuleManager extends DecafParserBaseListener {
       }
       // 1. No identifier is declared twice in the same scope.
       else
-        System.out.println("Error: " + identifierName + " has already been defined.");
+        errorHandler.handleError("variable '" + identifierName + "' has already been defined.",
+        ctx.start);
     }
   }
 
@@ -256,16 +271,17 @@ class SemanticRuleManager extends DecafParserBaseListener {
       // 7. A return statement must not have a return value unless it appears in the body of a
       // method that is declared to return a value.
       if (method.type == Symbol.Type.VOID && ctx.expr(0) != null)
-        System.out.println("Error: method " + method.name + " cannot return an expression");
+        errorHandler.handleError("method '" + method.name + "' cannot return a value", ctx.start);
       else if (method.type != Symbol.Type.VOID) {
         if (ctx.expr(0) == null)
-          System.out.println("Error: method " + method.name + " return missing.");
+          errorHandler.handleError("method '" + method.name + "' missing RETURN.", ctx.start);
         // 8. The expression in a return statement must have the same type as the declared result
         // type of the enclosing method definition.
         else {
           Symbol.Type exprType = exprTypes.get(ctx.expr(0));
           if (method.type != exprType)
-            System.out.println("Error: " + method.name + " returned value must match return type.");
+            errorHandler.handleError(method.name + " returned value must match return type.",
+              ctx.start);
         }
       } 
     }
@@ -273,7 +289,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
       Symbol.Type exprType = exprTypes.get(ctx.expr(0));
       // 11. The expr in an if statement must have type boolean.
       if (exprType != Symbol.Type.BOOLEAN)
-        System.out.println("Error: if expression must be a boolean");
+        errorHandler.handleError("IF expression must be a boolean", ctx.start);
     }
     else if (ctx.assignOp() != null) {
       String locationName = ctx.location().IDENTIFIER().getText();
@@ -281,14 +297,14 @@ class SemanticRuleManager extends DecafParserBaseListener {
       Symbol.Type exprType = exprTypes.get(ctx.expr(0));
 
       if (location == null)
-        System.out.println("Error: variable " + locationName + " cannot be found.");
+        errorHandler.handleError("variable '" + locationName + "' cannot be found.", ctx.start);
       else {
         if (ctx.assignOp().ASSIGNMENT() != null) {
 
           // 15. The location and expr in an assignment: `location = expr`, must have the same type.
           if (location.type != exprType)
-            System.out.println("Error: incompatible types: " + exprType + " cannot be converted to "
-            + location.type + "====" + locationName);
+            errorHandler.handleError(exprType + " cannot be converted to " + location.type,
+              ctx.expr(0).start);
 
           // Technically an array can be assigned to an array index; eg `int x[1], y[2]; x[0] = y`.
           // However, since Decaf doesn't allow multi-dimensional arrays, an array index assignment
@@ -318,14 +334,15 @@ class SemanticRuleManager extends DecafParserBaseListener {
 
               // left hand side is an array index but right hand side is an array
               if      (lhsIsIndex == true && rhsIsIndex == false)
-                System.out.println("Error: multi-dimensional arrays are not permitted.");
+                errorHandler.handleError("multi-dimensional arrays are not permitted.", ctx.start);
               // both sides are arrays but their sizes are different.
               else if (((ArrayVariableSymbol) location).size != ((ArrayVariableSymbol) variable).size)
-                System.out.println("Error: arrays can only be assigned to similar sized arrays.");
+                errorHandler.handleError("arrays can only be assigned to similar sized arrays.",
+                  ctx.start);
               // left hand side is an array, right hand side is an array index
               else if (lhsIsIndex == false && rhsIsIndex == true)
-                System.out.println("Error: incompatible types: " + exprType + " cannot be " + 
-                  "converted to " + location.type + "[]");
+                errorHandler.handleError(exprType + " cannot be converted to " + location.type
+                  + "[]", ctx.start);
             }
           }
         }
@@ -333,9 +350,8 @@ class SemanticRuleManager extends DecafParserBaseListener {
           // 16. The location and the expr in an incrementing assignment: `location += expr`
           // and decrementing assignment: `location -= expr`, must be of type int.
           if (location.type != Symbol.Type.INT || exprType != Symbol.Type.INT)
-            System.out.println(
-              "Error: in an incrementing/decrementing assignment, operands must be of type INT; " +
-              location.type + " & " + exprType + " given.");
+            errorHandler.handleError("operands must be of type INT; " + location.type + " & "
+              + exprType + " given.", ctx.start);
         }
       }
     }
@@ -344,8 +360,10 @@ class SemanticRuleManager extends DecafParserBaseListener {
       Symbol.Type expr1Type = exprTypes.get(ctx.expr(1));
 
       // 17. The initial expr and the ending expr of for must have type int.
-      if (expr0Type != Symbol.Type.INT || expr1Type != Symbol.Type.INT)
-        System.out.println("Error: both expressions in for loop must be of type INT");
+      if      (expr0Type != Symbol.Type.INT)
+        errorHandler.handleError("operand in FOR must be of type INT", ctx.expr(0).start);
+      else if (expr1Type != Symbol.Type.INT)
+        errorHandler.handleError("operand in FOR must be of type INT", ctx.expr(1).start);
     }
     else if (ctx.BREAK() != null || ctx.CONTINUE() != null) {
       // At this point a break/continue statement has been encountered. They have to be in a for.
@@ -365,20 +383,20 @@ class SemanticRuleManager extends DecafParserBaseListener {
       }
 
       // 18. All break and continue statements must be contained within the body of a for.
-      if (!foundFor)  System.out.println("Error: break and continue must be inside a for loop"); 
+      if (!foundFor)  errorHandler.handleError("BREAK/CONTINUE must be inside a FOR", ctx.start); 
     }
   }
 
   public void exitMethodCall(DecafParser.MethodCallContext ctx) {
     if (ctx.CALLOUT() != null) {
       if (CLI.debug)
-        System.out.println("callout to library function: " + ctx.STRINGLITERAL().getText());
+        System.out.println("CALLOUT to library function: " + ctx.STRINGLITERAL().getText());
     } else {
       // 2. No identifier is used before it is declared.
       String methodName = ctx.methodName().IDENTIFIER().getText();
       MethodSymbol method = (MethodSymbol) currentScope.resolve(methodName);
-      if (method == null) {
-        System.out.println("Error: method " + methodName + " cannot be found.");
+      if (method == null) { 
+        errorHandler.handleError("method '" + methodName + "' cannot be found.", ctx.start);
 
       // 5. The number and types of arguments in a method call must be the same as the number
       // and  types of the formals, i.e., the signatures must be identical
@@ -410,12 +428,13 @@ class SemanticRuleManager extends DecafParserBaseListener {
                   "[formal  : " + formalParameter.type + "]");
             
               if (suppliedParameterType != formalParameter.type) 
-                System.out.println("Error: type mismatch; " + suppliedParameterType +
-                  " given, " + formalParameter.type + " expected.");
+                errorHandler.handleError("type mismatch; " + suppliedParameterType +
+                  " given, " + formalParameter.type + " expected.", suppliedParameter.start);
             }
           }
-        } else  System.out.println("Error: method " + methodName + " expects " + 
-                  numOfParamsRequired + " parameters. " + numOfParamsSupplied + " given.");
+        } else  errorHandler.handleError("method '" + methodName + "' expects " + 
+                  numOfParamsRequired + " parameters. " + numOfParamsSupplied + " given.",
+                  ctx.start);
       }
     }
   }
@@ -427,18 +446,18 @@ class SemanticRuleManager extends DecafParserBaseListener {
 
     // 9. An id used as a location must name a declared local/global variable or formal parameter.
     if (location == null)
-      System.out.println("Error: variable " + locationName + " cannot be found.");
+      errorHandler.handleError("variable '" + locationName + "' cannot be found.", ctx.start);
     else {
       // 10. For all locations of the form id[expr];
       if (ctx.LBRACE() != null && ctx.RBRACE() != null) {
         // a) id must be an array variable,
         if (!(location instanceof ArrayVariableSymbol))
-          System.out.println("Error: " + locationName + " is not an array.");
+          errorHandler.handleError("'" + locationName + "' is not an array.", ctx.start);
         else {
           Symbol.Type exprType = exprTypes.get(ctx.expr());
           // b) the type of <expr> must be int.
           if (exprType != Symbol.Type.INT)
-            System.out.println("Error: array index must be an integer.");
+            errorHandler.handleError("array index must be an INT.", ctx.start);
         }
       }
     }
@@ -471,11 +490,11 @@ class SemanticRuleManager extends DecafParserBaseListener {
         MethodSymbol method = (MethodSymbol) currentScope.resolve(methodName);
         // 6. If a method call is used as an expression, the method must return a result.
         if (method == null)
-          System.out.println("Error: method " + methodName + " cannot be found.");
+          errorHandler.handleError("method '" + methodName + "' cannot be found.", ctx.start);
         else
           if (method.type == Symbol.Type.VOID)
-            System.out.println("Error: method " + methodName + " is used as an expression, but has " 
-              + method.type + " return type.");
+            errorHandler.handleError("method '" + methodName + "' is used as an expression, but has" 
+              + " " + method.type + " return type.", ctx.start);
       }
     }
     // This is the case when it's '-1' instead of 'x - 1'; there is only one expression
@@ -490,7 +509,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
       if  (notExprType == Symbol.Type.BOOLEAN)
         exprTypes.put(ctx, Symbol.Type.BOOLEAN);
       else { 
-        System.out.println("Error: not ( ! ) operand must be of type boolean.");
+        errorHandler.handleError("NOT ( ! ) operand must be of type BOOLEAN.", ctx.expr(0).start);
         exprTypes.put(ctx, Symbol.Type.INVALID);
       }
     }
@@ -498,19 +517,19 @@ class SemanticRuleManager extends DecafParserBaseListener {
       Symbol.Type exprType = exprTypes.get(ctx.expr(0));
       exprTypes.put(ctx, exprType);
     }
-    else if (arithmaticBinaryOperation(ctx)) {
+    else if (arithmeticBinaryOperation(ctx)) {
       Symbol.Type lExprType = exprTypes.get(ctx.expr(0));
       Symbol.Type rExprType = exprTypes.get(ctx.expr(1));
 
       // 12. The operands of arith_ops and rel_ops must have type int.
       if (lExprType == Symbol.Type.INT && rExprType == Symbol.Type.INT) {
-        if (arithmaticReturnsInteger(ctx))
+        if (arithmeticReturnsInteger(ctx))
           exprTypes.put(ctx, Symbol.Type.INT);
-        else if (arithmaticReturnsBoolean(ctx))
+        else if (arithmeticReturnsBoolean(ctx))
           exprTypes.put(ctx, Symbol.Type.BOOLEAN);
       } else {
         exprTypes.put(ctx, Symbol.Type.INVALID);
-        System.out.println("Error: arithmatic operands must be of type integer.");
+        errorHandler.handleError("arithmetic operands must be of type INT.", ctx.start);
       }
     }
     else if (equalityBinaryOperations(ctx)) {
@@ -519,13 +538,13 @@ class SemanticRuleManager extends DecafParserBaseListener {
 
       // 13. The operands of eq_ops must have the same type, either int or boolean.
       if (lExprType != rExprType)
-        System.out.println("Error: boolean operands must be the same type.");
+        errorHandler.handleError("BOOLEAN operands must be the same type.", ctx.start);
 
       if (lExprType == Symbol.Type.BOOLEAN && rExprType == Symbol.Type.BOOLEAN
       ||  lExprType == Symbol.Type.INT     && rExprType == Symbol.Type.INT)
         exprTypes.put(ctx, Symbol.Type.BOOLEAN);
       else {
-        System.out.println("Error: equality operands must be of type boolean or integer.");
+        errorHandler.handleError("equality operands must be of type BOOLEAN or INT.", ctx.start);
         exprTypes.put(ctx, Symbol.Type.INVALID);
       }
     }
@@ -537,18 +556,18 @@ class SemanticRuleManager extends DecafParserBaseListener {
       if (lExprType == Symbol.Type.BOOLEAN && rExprType == Symbol.Type.BOOLEAN)
         exprTypes.put(ctx, Symbol.Type.BOOLEAN);
       else {
-        System.out.println("Error: arithmatic operands must be of type integer.");
+        errorHandler.handleError("arithmetic operands must be of type INT.", ctx.start);
         exprTypes.put(ctx, Symbol.Type.INVALID);
       }
     }
   }
 
-  // some arithmatic expressions set the type to different things. Best way to distinguish is here.
-  public boolean arithmaticBinaryOperation(DecafParser.ExprContext ctx) {
-    return arithmaticReturnsInteger(ctx) || arithmaticReturnsBoolean(ctx);
+  // some arithmetic expressions set the type to different things. Best way to distinguish is here.
+  public boolean arithmeticBinaryOperation(DecafParser.ExprContext ctx) {
+    return arithmeticReturnsInteger(ctx) || arithmeticReturnsBoolean(ctx);
   }
 
-  public boolean arithmaticReturnsInteger(DecafParser.ExprContext ctx) {
+  public boolean arithmeticReturnsInteger(DecafParser.ExprContext ctx) {
     return  ctx.MULTIPLY()    != null
         ||  ctx.DIVISION()    != null
         ||  ctx.MODULO()      != null
@@ -556,7 +575,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
         ||  ctx.MINUS()       != null;
   }
 
-  public boolean arithmaticReturnsBoolean(DecafParser.ExprContext ctx) {
+  public boolean arithmeticReturnsBoolean(DecafParser.ExprContext ctx) {
     return  ctx.LESSTHAN()    != null
         ||  ctx.GREATERTHAN() != null
         ||  ctx.LSSTHNEQTO()  != null
