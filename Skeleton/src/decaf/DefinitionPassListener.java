@@ -15,6 +15,7 @@ import java.util.*;
 class DefinitionPassListener extends DecafParserBaseListener {
 
   ParseTreeProperty<Scope> scopes = new ParseTreeProperty<>();
+  ParseTreeProperty<Symbol.Type> exprTypes = new ParseTreeProperty<>();
   GlobalScope globalScope;
   Scope currentScope;
 
@@ -32,6 +33,7 @@ class DefinitionPassListener extends DecafParserBaseListener {
    */
   public void exitProgram(DecafParser.ProgramContext ctx) {
     if (CLI.debug) System.out.println(globalScope);
+
   }
 
   /**
@@ -163,5 +165,84 @@ class DefinitionPassListener extends DecafParserBaseListener {
       // Add that symbol to the methods scope
       currentScope.define(newVariableSymbol);
     }
+  }
+
+  public void enterExpr(DecafParser.ExprContext ctx) {
+    if      (ctx.location()       != null)  {
+      Symbol identifier = currentScope.resolve(ctx.location().IDENTIFIER().getText());
+      if    (identifier           != null)  exprTypes.put(ctx, identifier.type);
+      else                                  exprTypes.put(ctx, Symbol.Type.INVALID);
+    }
+    else if (ctx.INTLITERAL()     != null)  exprTypes.put(ctx, Symbol.Type.INT);    
+    else if (ctx.BOOLEANLITERAL() != null)  exprTypes.put(ctx, Symbol.Type.BOOLEAN);
+    else if (ctx.STRINGLITERAL()  != null)  exprTypes.put(ctx, Symbol.Type.INVALID);
+    else if (ctx.CHARLITERAL()    != null)  exprTypes.put(ctx, Symbol.Type.INVALID);
+    else if (ctx.methodCall()     != null)  {
+
+      // TODO: Will error if method hasn't been defined before it is called. This is actually part
+      //  --   of the implementation designed for the future; ie. forward referencing isn't allowed.
+
+      Symbol method = currentScope.resolve(ctx.methodCall().methodName().getText());
+      exprTypes.put(ctx, method.type);
+    }
+  }
+
+  public void exitExpr(DecafParser.ExprContext ctx) {
+    // This is the case when it's '-1' instead of 'x - 1'; there is only one expression
+    if (ctx.MINUS() != null && ctx.expr().size() == 1) {
+      Symbol.Type minusExprType = exprTypes.get(ctx.expr(0));
+      if    (minusExprType == Symbol.Type.INT)  exprTypes.put(ctx, Symbol.Type.INT);
+      else                                      exprTypes.put(ctx, Symbol.Type.INVALID);
+        // System.out.println("Error: bad operand for minus");
+    }
+    else if (ctx.NOT() != null) {
+      Symbol.Type notExprType = exprTypes.get(ctx.expr(0));
+      if    (notExprType == Symbol.Type.BOOLEAN) exprTypes.put(ctx, Symbol.Type.BOOLEAN);
+      else                                       exprTypes.put(ctx, Symbol.Type.INVALID);
+    }
+    else if (ctx.LPAREN() != null && ctx.RPAREN() != null) {
+      Symbol.Type exprType = exprTypes.get(ctx.expr(0));
+      exprTypes.put(ctx, exprType);
+    }
+    else if (arithmaticBinaryOperation(ctx)) {
+      Symbol.Type lExpType = exprTypes.get(ctx.expr(0));
+      Symbol.Type rExpType = exprTypes.get(ctx.expr(1));
+
+      if (lExpType == Symbol.Type.INT && rExpType == Symbol.Type.INT)
+        exprTypes.put(ctx, Symbol.Type.INT);
+      else
+        exprTypes.put(ctx, Symbol.Type.INVALID);
+        // System.out.println("Error: bad operand for expression");
+    }
+    else if (booleanBinaryOperation(ctx)) {
+      Symbol.Type lExpType = exprTypes.get(ctx.expr(0));
+      Symbol.Type rExpType = exprTypes.get(ctx.expr(1));
+      
+      if (lExpType == Symbol.Type.BOOLEAN && rExpType == Symbol.Type.BOOLEAN
+      ||  lExpType == Symbol.Type.INT     && rExpType == Symbol.Type.INT)
+        exprTypes.put(ctx, Symbol.Type.BOOLEAN);
+      else
+        exprTypes.put(ctx, Symbol.Type.INVALID);
+        // System.out.println("Error: bad operand for binary operation");
+    }
+  }
+
+  public boolean arithmaticBinaryOperation(DecafParser.ExprContext ctx) {
+    return  ctx.MULTIPLY()    != null
+        ||  ctx.DIVISION()    != null
+        ||  ctx.MODULO()      != null
+        ||  ctx.ADDITION()    != null
+        ||  ctx.MINUS()       != null
+        ||  ctx.LESSTHAN()    != null
+        ||  ctx.GREATERTHAN() != null
+        ||  ctx.LSSTHNEQTO()  != null
+        ||  ctx.GRTTHNEQTO()  != null;
+  }
+
+  public boolean booleanBinaryOperation(DecafParser.ExprContext ctx) {
+    return  ctx.EQUAL()     != null
+        ||  ctx.NOTEQUAL()  != null
+        ||  ctx.AND()       != null
+        ||  ctx.OR()        != null;
   }
 }

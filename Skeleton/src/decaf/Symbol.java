@@ -14,7 +14,7 @@ public class Symbol {
   /**
    * Define the types of Symbols that are available in Decaf.
    */
-  public static enum Type { VOID, INT, BOOLEAN }
+  public static enum Type { VOID, INT, BOOLEAN, INVALID }
 
   String name;
   Type type;
@@ -36,10 +36,12 @@ public class Symbol {
    */
   public static Symbol.Type getType(int tokenType) {
     switch (tokenType) {
-      case DecafParser.VOID    : return Type.VOID;
-      case DecafParser.INT     : return Type.INT;
-      case DecafParser.BOOLEAN : return Type.BOOLEAN;
-      default                  : return null;
+      case DecafParser.VOID           : return Type.VOID;
+      case DecafParser.INT            :
+      case DecafParser.INTLITERAL     : return Type.INT;
+      case DecafParser.BOOLEAN        :
+      case DecafParser.BOOLEANLITERAL : return Type.BOOLEAN;
+      default                         : return Type.INVALID;
     }
   }
 }

@@ -64,6 +64,8 @@ public class Main {
     else if (  CLI.target == CLI.INTER  )  check(parse());
   }
 
+  protected static void setUp(String[] args) { setUp(args, false); }
+
   /**
   * Sets up the CLI object that encapsulates the information captured from the command line, the
   * DecafLexar that is instantiated from the input stream, and the DecafParser which is in turn
@@ -72,14 +74,23 @@ public class Main {
   * with the Lexer and Parser.
   * @param args The command-line arguments supplied from main().
   */
-  private static void setUp(String[] args) {
+  protected static void setUp(String[] args, boolean stringInput) {
     try {
-      // The first argument into parse is the arguments supplied from the command line, the second
-      // is an empty array of optional arguments which aren't used.
-      CLI.parse(args, new String[0]);
  
-      InputStream inputStream = args.length == 0 ?
-        System.in : new java.io.FileInputStream(CLI.infile);
+      InputStream inputStream = null;
+      if (stringInput) { 
+        inputStream = new ByteArrayInputStream(args[0].getBytes());
+      } else {
+        // The first argument into parse is the arguments supplied from the command line, the second
+        // is an empty array of optional arguments which aren't used.
+        CLI.parse(args, new String[0]);
+
+        if (args.length == 0) {
+          inputStream = System.in; 
+        } else { 
+          inputStream = new java.io.FileInputStream(CLI.infile);
+        }
+      }
 
       // Retrieve input from whatever source was decided.
       ANTLRInputStream antlrIOS = new ANTLRInputStream(inputStream);
@@ -93,13 +104,17 @@ public class Main {
       // // This class file is generated at runtime by ANTLR.
       parser = new DecafParser(tokens);
 
+      // Is this needed?
+      // parser.setBuildParseTree(true);
+
       // Remove the ConsoleListener from the Lexer and add custom ErrorListener.
       lexer.removeErrorListeners();
       lexer.addErrorListener(new SyntaxErrorListener(CLI.infile, CLI.outfile));
 
       // Add DiagnosticErrorListener to Parser and set ambiguity reporting to high.
       parser.addErrorListener(new DiagnosticErrorListener());
-      parser.getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);
+      if (CLI.debug)
+        parser.getInterpreter().setPredictionMode(PredictionMode.LL_EXACT_AMBIG_DETECTION);
 
       // Add all custom error listeners to the Lexer and Parser.
       if (_extraErrorListeners != null) {
@@ -117,7 +132,6 @@ public class Main {
         put(lexer.CHARLITERAL, "CHARLITERAL ");
         put(lexer.STRINGLITERAL, "STRINGLITERAL ");
         put(lexer.BOOLEANLITERAL, "BOOLEANLITERAL ");
-        put(lexer.NOT, "LOGICNOT ");
       }};
 
       if (CLI.debug) { 
@@ -133,7 +147,7 @@ public class Main {
    * Iterates over the tokenised input building an iterable String object for each token that can be
    * written as a line of text to a file. This text is in the form: line number (optional)type text
    */
-  private static void scan() {
+  protected static void scan() {
     // Lexer provides the next Token(type, text, line, col) object from the stream.
     for (Token token = lexer.nextToken(); token.getType() != Token.EOF; token = lexer.nextToken()) {
 
@@ -150,7 +164,7 @@ public class Main {
    * Builds a ParseTree from the tokens scanned by the Lexer.
    * @return ParseTree The Abstract Parse Tree (APT) generated from the tokens.
    */
-  private static ParseTree parse() {
+  protected static ParseTree parse() {
     // Returns the Context object for "program" (defined in DecafParser.g4)
     ParseTree tree = parser.program();
 
@@ -167,7 +181,7 @@ public class Main {
       JFrame frame = new JFrame("Tree");
       frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
       TreeViewer treeViewer = new TreeViewer(Arrays.asList(parser.getRuleNames()), tree);
-      treeViewer.setScale(5);
+      treeViewer.setScale(3);
       frame.getContentPane().add(treeViewer);
       frame.pack();
       frame.setVisible(true);
@@ -198,12 +212,12 @@ public class Main {
    * ANTLR robust, and so it feels foolish to rewrite boilerplate code when it's already been
    * implemented in an intelligent fashion.
    */
-  private static void check(ParseTree tree) {
+  protected static void check(ParseTree tree) {
     DefinitionPassListener definitionPass = new DefinitionPassListener();
     ParseTreeWalker.DEFAULT.walk(definitionPass, tree);
 
-    ReferencePassListener referencePass =
-      new ReferencePassListener(definitionPass.globalScope, definitionPass.scopes);
+    ReferencePassListener referencePass = new ReferencePassListener(definitionPass.globalScope, 
+      definitionPass.scopes, definitionPass.exprTypes);
     ParseTreeWalker.DEFAULT.walk(referencePass, tree);
   }
 

@@ -33,7 +33,7 @@ block: LCURLY varDecl* statement* RCURLY;
 varDecl: type IDENTIFIER (COMMA IDENTIFIER)* EOL;
 
 // basic types.
-type: (INT | BOOLEAN);
+type: (INT | BOOLEAN | VOID);
 
 statement : 
           ( location assignOp expr EOL
