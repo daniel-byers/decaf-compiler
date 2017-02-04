@@ -33,17 +33,17 @@
   <target name="scanner" depends="init">
   	<antlr4 src="${src}/decaf/DecafLexer.g4" package="decaf">
     	<args>
-    		<arg value="-o"/>
-    		<arg value="src/decaf"/>
-	        <arg value="-package"/>
-	        <arg value="@{package}"/>
-		</args>
-	</antlr4>
+        <arg value="-o"/>
+        <arg value="src/decaf"/>
+          <arg value="-package"/>
+          <arg value="@{package}"/>
+    </args>
+  </antlr4>
   </target> 
 
   <target name="parser" depends="scanner">
-  	<antlr4 src="${src}/decaf/DecafParser.g4" package="decaf">
-  		<args>
+    <antlr4 src="${src}/decaf/DecafParser.g4" package="decaf">
+      <args>
   		<arg value="-o"/>
     		<arg value="src/decaf"/>
   		<arg value="-lib"/>

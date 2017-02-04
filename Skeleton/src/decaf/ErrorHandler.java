@@ -45,9 +45,13 @@ public class ErrorHandler {
     return new Error(fileNameAndLineNumber, strPointer, line, errorMessage);
   }
 
-  public void printErrors() { _printErrors(); }
+  public void printErrors() {
+    // TODO: Remove duplicate errors from HashMap
+    _printErrors();
+    System.out.println("[decaf] TOTAL ERRORS: " + totalErrors());
+  }
 
-  private void _printErrors() { for (Error error : errors.values()) System.out.println(error); }
+  private void _printErrors() {for (Error error : errors.values()) System.out.println(error); }
 
   class Error {
     public Error(String fileNameAndLineNumber, String pointer, String line, String errorMessage) {
