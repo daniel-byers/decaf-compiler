@@ -84,6 +84,7 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       programInstructionSet.addInstruction(additionTuple(r0, r1));
       exprResultRegisterMap.put(ctx, r1);
     }
+    else if (ctx)
   }
 
   public void exitProgram(DecafParser.ProgramContext ctx) { 
