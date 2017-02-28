@@ -32,7 +32,7 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   private ParseTreeProperty<String> exprResultRegisterMap; 
 
   // This holds a list of ThreeCodeTuples in order that they are encounted in the tree, therefore,
-  // also the order in which they appear in the Decaf source code. Each listener will be responsible
+  // also the order in which they appear in the Decaf source code. Each callback will be responsible
   // for adding however many ThreeCodeTuple objects to the InstructionSet that are required to do 
   // the task it's designed to do. After complete traversal of the ParseTree, a list of instructions
   // will represent the sequence of low level instructions to be generated.
@@ -84,11 +84,11 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       programInstructionSet.addInstruction(additionTuple(r0, r1));
       exprResultRegisterMap.put(ctx, r1);
     }
-    else if (ctx)
+    // else if (ctx.)
   }
 
   public void exitProgram(DecafParser.ProgramContext ctx) { 
-    System.out.println(programInstructionSet.toString());
+    // System.out.println(programInstructionSet.toString());
 
     // checks register name generation
     // for (int i = 0;i <= 260 ; i++ ) System.out.println(nextRegister());
@@ -187,7 +187,7 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   class ThreeCodeTuple {
     public ThreeCodeTuple(String command, String source, String destination) {
       this.command = command;
-      this.source = source;
+      this.source = source + ",";
       this.destination = destination;
     }
 

@@ -37,7 +37,7 @@ public class ErrorHandler {
   // margin and the location of the invalid Symbol.
   private Error _buildError(String message, int lineNumber, int charPos) {
     String fileNameAndLineNumber = 
-      Paths.get(CLI.infile).toAbsolutePath() + ":" + Integer.toString(lineNumber + 1) + "\n";
+      Paths.get(CLI.infile).toAbsolutePath() + ":" + Integer.toString(lineNumber) + "\n";
     String strPointer = new String(new char[charPos]).replace("\0", " ") + "^" + "\n";
     String line = infile.get(lineNumber - 1) + "\n"; 
     String errorMessage = "error: " + message + "\n";

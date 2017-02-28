@@ -194,28 +194,23 @@ class SemanticRuleManager extends DecafParserBaseListener {
     while (indentifierListItr.hasNext()) {
       String identifierName = ( (TerminalNode) indentifierListItr.next() ).getText();
 
-      
-      // Recursive ascent of stack from this scope to the location of the global scope. Variables
-      // cannot be defined again if they have already been done so in a scope that they can see. eg.
-      // foo(int a) {
-      //  int a; // invalid as a is defined in formal parameters
-      //  int b; // valid
-      //  {
-      //    int a; // invalid as a has been defined in formal parameters
-      //    int b; // invalid as b has been defined in an enclosing (non-global) scope.
-      //  }
+      // void foo(int a) {
+      //   int a; // invalid as defined in formal parameters.
+      //   {
+      //     int a; // valid.
+      //     {
+      //       int a; // valid.
+      //       int a; // invalid as already defined in scope.
+      //     }
+      //   }
       // }
-      // Note: As GlobalScope is global, we don't need to check for duplicates there.
-      boolean found = false;
-      Scope shadowScope = currentScope;
-      while (shadowScope != null ) {
-        if (shadowScope.resolveLocal(identifierName) != null) found = true;
 
-        // We want to check in every scope before global where duplicate names can exist.
-        String nextScopeName = shadowScope.getEnclosingScope().getScopeName();
-        if    (nextScopeName == "globals")  break;
-        else                                shadowScope = shadowScope.getEnclosingScope();
-      }
+      boolean found = false;
+      // Does the variable exist in the current scope?
+      if      (currentScope.resolveLocal(identifierName) != null) found = true;
+      // If the enclosing scope is a method: does the variable exist in the formal parameters?
+      else if (currentScope.getEnclosingScope() instanceof MethodSymbol)
+        if (currentScope.getEnclosingScope().resolveLocal(identifierName) != null) found = true;
 
       if (!found) {
         // Create a new VariableSymbol from the IDENTIFIER text and the shared type.
@@ -471,7 +466,6 @@ class SemanticRuleManager extends DecafParserBaseListener {
     }
     else if (ctx.INTLITERAL()     != null)  exprTypes.put(ctx, Symbol.Type.INT);    
     else if (ctx.BOOLEANLITERAL() != null)  exprTypes.put(ctx, Symbol.Type.BOOLEAN);
-    else if (ctx.STRINGLITERAL()  != null)  exprTypes.put(ctx, Symbol.Type.INVALID);
     else if (ctx.CHARLITERAL()    != null)  exprTypes.put(ctx, Symbol.Type.INVALID);
     else if (ctx.methodCall()     != null) {
       // Callouts return type INT. So the type of the expression containing it will be INT too.

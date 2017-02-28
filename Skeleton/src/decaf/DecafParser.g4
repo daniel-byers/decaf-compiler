@@ -69,6 +69,6 @@ expr:   MINUS expr
     |   expr OR expr
     |   location
     |   methodCall
-    |   (INTLITERAL | CHARLITERAL | BOOLEANLITERAL | STRINGLITERAL)
+    |   (INTLITERAL | CHARLITERAL | BOOLEANLITERAL)
     |   LPAREN expr RPAREN
     ;

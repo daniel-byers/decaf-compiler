@@ -182,7 +182,7 @@ public class Main {
     // Walks the tree, building the string representation of it.
     ParseTreeWalker.DEFAULT.walk(listener, tree);
     
-    printToFile(Arrays.asList(listener.toString()));
+    if (CLI.target == CLI.PARSE) printToFile(Arrays.asList(listener.toString()));
 
     if (CLI.debug) {
       System.out.println(listener.toString());
@@ -223,6 +223,11 @@ public class Main {
   private static void buildLowLevelIR(ParseTree tree) {
     LowLevelIRBuilder builder = new LowLevelIRBuilder();
     ParseTreeWalker.DEFAULT.walk(builder, tree);
+
+    if (CLI.target == CLI.ASSEMBLY)
+      printToFile(Arrays.asList(builder.programInstructionSet.toString()));
+    
+    if (CLI.debug) System.out.println(builder.programInstructionSet.toString());
   }
 
 
