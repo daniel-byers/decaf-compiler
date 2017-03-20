@@ -18,6 +18,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
 
   ParseTreeProperty<Scope> scopes = new ParseTreeProperty<>();
   ParseTreeProperty<Symbol.Type> exprTypes = new ParseTreeProperty<>();
+  public ParseTreeProperty<String> exprValues = new ParseTreeProperty<>();
   GlobalScope globalScope;
   Scope currentScope;
   ErrorHandler errorHandler;
@@ -197,7 +198,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
       // void foo(int a) {
       //   int a; // invalid as defined in formal parameters.
       //   {
-      //     int a; // valid.
+      //     int b; // valid.
       //     {
       //       int a; // valid.
       //       int a; // invalid as already defined in scope.
@@ -280,7 +281,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
         }
       } 
     }
-    else if (ctx.IF() != null) {
+    else if (ctx.IF() != null) { // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< TODO: Not handling ELSE
       Symbol.Type exprType = exprTypes.get(ctx.expr(0));
       // 11. The expr in an if statement must have type boolean.
       if (exprType != Symbol.Type.BOOLEAN)
@@ -464,8 +465,14 @@ class SemanticRuleManager extends DecafParserBaseListener {
       if    (identifier           != null)  exprTypes.put(ctx, identifier.type);
       else                                  exprTypes.put(ctx, Symbol.Type.INVALID);
     }
-    else if (ctx.INTLITERAL()     != null)  exprTypes.put(ctx, Symbol.Type.INT);    
-    else if (ctx.BOOLEANLITERAL() != null)  exprTypes.put(ctx, Symbol.Type.BOOLEAN);
+    else if (ctx.INTLITERAL()     != null) {
+      exprTypes.put(ctx, Symbol.Type.INT);
+      Main.exprValues.put(ctx, ctx.INTLITERAL().getText());
+    }
+    else if (ctx.BOOLEANLITERAL() != null) {
+      exprTypes.put(ctx, Symbol.Type.BOOLEAN);
+      Main.exprValues.put(ctx, ctx.BOOLEANLITERAL().getText());
+    }
     else if (ctx.CHARLITERAL()    != null)  exprTypes.put(ctx, Symbol.Type.INVALID);
     else if (ctx.methodCall()     != null) {
       // Callouts return type INT. So the type of the expression containing it will be INT too.
@@ -511,22 +518,22 @@ class SemanticRuleManager extends DecafParserBaseListener {
       Symbol.Type exprType = exprTypes.get(ctx.expr(0));
       exprTypes.put(ctx, exprType);
     }
-    else if (arithmeticBinaryOperation(ctx)) {
+    else if (ExpressionOperationRules.arithmeticBinaryOperation(ctx)) {
       Symbol.Type lExprType = exprTypes.get(ctx.expr(0));
       Symbol.Type rExprType = exprTypes.get(ctx.expr(1));
 
       // 12. The operands of arith_ops and rel_ops must have type int.
       if (lExprType == Symbol.Type.INT && rExprType == Symbol.Type.INT) {
-        if (arithmeticReturnsInteger(ctx))
+        if      (ExpressionOperationRules.arithmeticReturnsInteger(ctx))
           exprTypes.put(ctx, Symbol.Type.INT);
-        else if (arithmeticReturnsBoolean(ctx))
+        else if (ExpressionOperationRules.arithmeticReturnsBoolean(ctx))
           exprTypes.put(ctx, Symbol.Type.BOOLEAN);
       } else {
         exprTypes.put(ctx, Symbol.Type.INVALID);
         errorHandler.handleError("arithmetic operands must be of type INT.", ctx.start);
       }
     }
-    else if (equalityBinaryOperations(ctx)) {
+    else if (ExpressionOperationRules.equalityBinaryOperations(ctx)) {
       Symbol.Type lExprType = exprTypes.get(ctx.expr(0));
       Symbol.Type rExprType = exprTypes.get(ctx.expr(1));
 
@@ -542,7 +549,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
         exprTypes.put(ctx, Symbol.Type.INVALID);
       }
     }
-    else if (conditionalBinaryOperation(ctx)) {
+    else if (ExpressionOperationRules.conditionalBinaryOperation(ctx)) {
       Symbol.Type lExprType = exprTypes.get(ctx.expr(0));
       Symbol.Type rExprType = exprTypes.get(ctx.expr(1));
 
@@ -550,41 +557,9 @@ class SemanticRuleManager extends DecafParserBaseListener {
       if (lExprType == Symbol.Type.BOOLEAN && rExprType == Symbol.Type.BOOLEAN)
         exprTypes.put(ctx, Symbol.Type.BOOLEAN);
       else {
-        errorHandler.handleError("arithmetic operands must be of type INT.", ctx.start);
+        errorHandler.handleError("logical operands must be of type BOOLEAN.", ctx.start);
         exprTypes.put(ctx, Symbol.Type.INVALID);
       }
     }
-  }
-
-  // some arithmetic expressions set the type to different things. Best way to distinguish is here.
-  public boolean arithmeticBinaryOperation(DecafParser.ExprContext ctx) {
-    return arithmeticReturnsInteger(ctx) || arithmeticReturnsBoolean(ctx);
-  }
-
-  public boolean arithmeticReturnsInteger(DecafParser.ExprContext ctx) {
-    return  ctx.MULTIPLY()    != null
-        ||  ctx.DIVISION()    != null
-        ||  ctx.MODULO()      != null
-        ||  ctx.ADDITION()    != null
-        ||  ctx.MINUS()       != null;
-  }
-
-  public boolean arithmeticReturnsBoolean(DecafParser.ExprContext ctx) {
-    return  ctx.LESSTHAN()    != null
-        ||  ctx.GREATERTHAN() != null
-        ||  ctx.LSSTHNEQTO()  != null
-        ||  ctx.GRTTHNEQTO()  != null;
-  }
-
-  // these can be ints or bools
-  public boolean equalityBinaryOperations(DecafParser.ExprContext ctx) {
-    return  ctx.EQUAL()      != null
-        ||  ctx.NOTEQUAL()  != null;
-  }
-
-  // these must be booleans
-  public boolean conditionalBinaryOperation(DecafParser.ExprContext ctx) {
-    return  ctx.AND() != null
-        ||  ctx.OR()  != null;
   }
 }

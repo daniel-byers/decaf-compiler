@@ -1,0 +1,13 @@
+class program {
+  int a;
+
+  int foo() { 
+    a = 10;
+    return a; 
+  }
+
+  void main() {
+    int b;
+    b = foo();
+  }
+}

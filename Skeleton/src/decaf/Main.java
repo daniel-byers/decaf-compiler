@@ -48,6 +48,7 @@ public class Main {
   private static Map<Integer, String> printableTypes;
   private static ANTLRErrorListener[] _extraErrorListeners;
   private static ErrorHandler errorHandler;
+  public static ParseTreeProperty<String> exprValues = new ParseTreeProperty<>();
 
   /**
    * Main entry point for the compiler. Controls flow of process through scan, parse, and compile

@@ -16,7 +16,7 @@ import java.io.*;
 
 class LowLevelIRBuilder extends DecafParserBaseListener {
   public LowLevelIRBuilder() {
-    registerCounter = 0;
+    // registerCounter = 0;
     charList = new ArrayList<>();
     // TODO: Find a better way to populate the character list. This is crazy.
     for(char alphabet = 'a'; alphabet <= 'z'; alphabet++) charList.add(alphabet);
@@ -26,6 +26,7 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   }
 
   private int registerCounter; 
+  private int ifLabelCounter;
   private List<Character> charList;
   private ListIterator charListItr;
   private Map<String, String> variableRegisterMap;
@@ -39,16 +40,42 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   InstructionSet programInstructionSet = new InstructionSet();
 
   public void enterMethodDecl(DecafParser.MethodDeclContext ctx) { 
+    programInstructionSet.addInstruction(labelTuple(ctx.methodName().IDENTIFIER().getText() + ":"));
+  }
 
+  public void enterStatement(DecafParser.StatementContext ctx) {
   }
 
   public void exitStatement(DecafParser.StatementContext ctx) {
     if (ctx.assignOp() != null) {
       String locationName = ctx.location().IDENTIFIER().getText();
       String locationReg = variableRegisterMap.get(locationName);
-      String exprReg = exprResultRegisterMap.get(ctx.expr(0));
+      String expr = getExprValue(ctx.expr(0));
 
-      programInstructionSet.addInstruction(moveTuple(exprReg, locationReg));
+      programInstructionSet.addInstruction(moveTuple(expr, locationReg));
+    }
+    else if (ctx.RETURN() != null) {
+      String exprValue = getExprValue(ctx.expr(0));
+      programInstructionSet.addInstruction(moveTuple(exprValue, "%rax"));
+    }
+
+    String currentIfElseNumber = nextIfLabelNumber();
+    
+    if (ctx.IF()    != null)
+      programInstructionSet.addInstruction(labelTuple("if_equal_" + currentIfElseNumber + ":"));
+    
+    if (ctx.ELSE()  != null)
+      programInstructionSet.addInstruction(labelTuple("if_not_equal_" + currentIfElseNumber + ":"));
+  }
+
+  public void enterVarDecl(DecafParser.VarDeclContext ctx) {
+    ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
+
+    while (indentifierListItr.hasNext()) {
+      String identifierName = ( (TerminalNode) indentifierListItr.next() ).getText();
+      String r0 = nextRegister();
+      programInstructionSet.addInstruction(moveTuple("$0", r0));
+      variableRegisterMap.put(identifierName, r0);
     }
   }
 
@@ -76,15 +103,113 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   //  --    integer ASCII values, e.g., ’A’ represents the integer 65. (The type of a character
   //  --    literal is int.)
   public void enterExpr(DecafParser.ExprContext ctx) {
-    if (ctx.ADDITION() != null) {
+    if (ctx.methodCall() != null) {
       String r0 = nextRegister();
-      String r1 = nextRegister();
-      programInstructionSet.addInstruction(moveTuple("$" + ctx.expr(0).INTLITERAL().getText(), r0));
-      programInstructionSet.addInstruction(moveTuple("$" + ctx.expr(1).INTLITERAL().getText(), r1));
-      programInstructionSet.addInstruction(additionTuple(r0, r1));
-      exprResultRegisterMap.put(ctx, r1);
+      programInstructionSet.addInstruction(
+        jumpTuple(ctx.methodCall().methodName().IDENTIFIER().getText()));
+      programInstructionSet.addInstruction(moveTuple("%rax", r0));
+      exprResultRegisterMap.put(ctx, r0);
     }
-    // else if (ctx.)
+    else if (ctx.BOOLEANLITERAL() != null) {
+      String v0 = getExprValue(ctx);
+      String r0 = nextRegister();
+
+      if      (v0.equals("true"))   programInstructionSet.addInstruction(moveTuple("$1", r0));
+      else if (v0.equals("false"))  programInstructionSet.addInstruction(moveTuple("$0", r0));
+        
+      exprResultRegisterMap.put(ctx, r0);
+    }
+  }
+
+  public void exitExpr(DecafParser.ExprContext ctx) {
+    String v0 = getExprValue(ctx.expr(0));
+    String v1 = getExprValue(ctx.expr(1));
+
+    String r0 = nextRegister();
+    String r1 = nextRegister();
+
+    if (ExpressionOperationRules.arithmeticReturnsInteger(ctx)) {
+      if (ctx.DIVISION() != null) {
+        programInstructionSet.addInstruction(moveTuple(v0, "%rdx"));
+        programInstructionSet.addInstruction(moveTuple("$0", "%rax"));
+        programInstructionSet.addInstruction(divisionTuple(v1));
+        programInstructionSet.addInstruction(moveTuple("%rax", r0));
+
+        exprResultRegisterMap.put(ctx, r0);
+      } else {
+        programInstructionSet.addInstruction(moveTuple(v0, r0));
+        programInstructionSet.addInstruction(moveTuple(v1, r1));
+        
+        if      (ctx.ADDITION() != null) 
+          programInstructionSet.addInstruction(additionTuple(r0, r1));
+        else if (ctx.MINUS()    != null)
+          programInstructionSet.addInstruction(subtractionTuple(r0, r1));
+        else if (ctx.MULTIPLY() != null)
+          programInstructionSet.addInstruction(multiplicationTuple(r0, r1));
+
+        exprResultRegisterMap.put(ctx, r1);
+      }
+    }
+    else if (ExpressionOperationRules.booleanBinaryOperations(ctx)) {
+      if (ExpressionOperationRules.equalityBinaryOperations(ctx)) {
+        programInstructionSet.addInstruction(cmpTuple(v0, v1));
+
+        if      (ctx.EQUAL()    != null) {
+          programInstructionSet.addInstruction(moveEqualTuple("$1", r0));
+          programInstructionSet.addInstruction(moveNotEqualTuple("$0", r0));
+        }
+        else if (ctx.NOTEQUAL() != null) {
+          programInstructionSet.addInstruction(moveEqualTuple("$0", r0));
+          programInstructionSet.addInstruction(moveNotEqualTuple("$1", r0));
+        }
+        exprResultRegisterMap.put(ctx, r0);
+      }
+      else if (ExpressionOperationRules.conditionalBinaryOperation(ctx)) {
+        System.out.println("v0 - " + v0 + ", v1 - " + v1);
+        programInstructionSet.addInstruction(moveTuple(v0, r0));
+        programInstructionSet.addInstruction(moveTuple(v1, r1));
+        programInstructionSet.addInstruction(additionTuple(r0, r1));
+
+        if      (ctx.AND()  != null) {
+          // true bits are set to 1, so true && true = 1 + 1 would result in a 2.
+          programInstructionSet.addInstruction(moveTuple("$2", r0));          
+          programInstructionSet.addInstruction(cmpTuple(r1, r0));
+
+          programInstructionSet.addInstruction(moveEqualTuple("$1", r0));
+          programInstructionSet.addInstruction(moveNotEqualTuple("$0", r0));
+        }
+        else if (ctx.OR()   != null) {
+          // false bits are set to 0, so any addition with true bit would result in a non-zero int.
+          programInstructionSet.addInstruction(moveTuple("$0", r0));          
+          programInstructionSet.addInstruction(cmpTuple(r1, r0));
+
+          programInstructionSet.addInstruction(moveGreaterThanTuple("$1", r0));
+          programInstructionSet.addInstruction(moveEqualTuple("$0", r0));
+        }
+        exprResultRegisterMap.put(ctx, r0);
+      }
+      else if (ExpressionOperationRules.arithmeticReturnsBoolean(ctx)) {
+        programInstructionSet.addInstruction(cmpTuple(v0, v1));
+
+        if      (ctx.LESSTHAN()    != null) {
+          programInstructionSet.addInstruction(moveLessThanTuple("$1", r0));
+          programInstructionSet.addInstruction(moveGreaterThanEqualTuple("$0", r0));
+        }
+        else if (ctx.GREATERTHAN() != null) {
+          programInstructionSet.addInstruction(moveGreaterThanTuple("$1", r0));
+          programInstructionSet.addInstruction(moveLessThanEqualTuple("$0", r0));
+        }
+        else if (ctx.LSSTHNEQTO()  != null) {
+          programInstructionSet.addInstruction(moveLessThanEqualTuple("$1", r0));        
+          programInstructionSet.addInstruction(moveGreaterThanTuple("$0", r0));
+        }
+        else if (ctx.GRTTHNEQTO()  != null) {
+          programInstructionSet.addInstruction(moveGreaterThanEqualTuple("$1", r0));
+          programInstructionSet.addInstruction(moveLessThanTuple("$0", r0));
+        }
+        exprResultRegisterMap.put(ctx, r0);
+      }
+    }
   }
 
   public void exitProgram(DecafParser.ProgramContext ctx) { 
@@ -106,7 +231,7 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   public String nextRegister() {
     String register = "";
 
-    // If we are at the end of list ('z'); reset the list to the start and reset the counter to 0.
+    // If we are at the end of list ('z'); reset the list to the start and increment the counter.
     if (!charListItr.hasNext()) {
       charListItr = charList.listIterator(); 
       registerCounter++;
@@ -118,12 +243,52 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     return register;
   }
 
+  public String nextIfLabelNumber() {
+    ifLabelCounter++;
+    return Integer.toString(ifLabelCounter);
+  }
+
+  public String getExprValue(DecafParser.ExprContext ctx) {
+    try   { return variableRegisterMap.get(ctx.location().IDENTIFIER().getText()); }
+    catch (NullPointerException npe) {}
+
+    String tmp_r0 = exprResultRegisterMap.get(ctx);
+    String tmp_v  = Main.exprValues.get(ctx);
+
+    if      (tmp_r0 != null)            return tmp_r0;
+    else if (tmp_v  != null) {
+      try                               { return "$" + Integer.parseInt(tmp_v); }
+      catch (NumberFormatException nfe) { return tmp_v; }
+    }
+    else return null;
+  }
+
   public ThreeCodeTuple moveTuple(String src, String dest) {
     return new ThreeCodeTuple("mov", src, dest);
   }
 
-  public ThreeCodeTuple cmoveTuple(String src, String dest) {
-    return new ThreeCodeTuple("cmov", src, dest);
+  public ThreeCodeTuple moveEqualTuple(String src, String dest) {
+    return new ThreeCodeTuple("cmove", src, dest);
+  }
+
+  public ThreeCodeTuple moveNotEqualTuple(String src, String dest) {
+    return new ThreeCodeTuple("cmovne", src, dest);
+  }
+
+  public ThreeCodeTuple moveGreaterThanTuple(String src, String dest) {
+    return new ThreeCodeTuple("cmovg", src, dest);
+  }
+
+  public ThreeCodeTuple moveLessThanTuple(String src, String dest) {
+    return new ThreeCodeTuple("cmovl", src, dest);
+  }
+
+  public ThreeCodeTuple moveGreaterThanEqualTuple(String src, String dest) {
+    return new ThreeCodeTuple("cmovge", src, dest);
+  }
+
+  public ThreeCodeTuple moveLessThanEqualTuple(String src, String dest) {
+    return new ThreeCodeTuple("cmovle", src, dest);
   }
 
   public ThreeCodeTuple enterTuple(String src, String dest) {
@@ -161,6 +326,10 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   public ThreeCodeTuple jumpNEqTuple(String target) {
     return new ThreeCodeTuple("jne", target);
   }
+
+  public ThreeCodeTuple cmpTuple(String src, String dest) {
+    return new ThreeCodeTuple("cmp", src, dest);
+  }
   
   // `add src, dest`: add src to dest.
   public ThreeCodeTuple additionTuple(String num0, String num1) {
@@ -182,7 +351,9 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     return new ThreeCodeTuple("idiv", divisor);
   }
 
-  // 
+  public ThreeCodeTuple labelTuple(String label) {
+    return new ThreeCodeTuple(label);
+  }
 
   class ThreeCodeTuple {
     public ThreeCodeTuple(String command, String source, String destination) {
@@ -218,9 +389,12 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
 
     public void addInstruction(ThreeCodeTuple instruction) { instructions.add(instruction); }
 
+    public void removeLastInstructions(int amountToRemove) {
+      instructions = instructions.subList(0, instructions.size() - amountToRemove);
+    }
+
     public void addDefaultInstructions(){
       instructions.add(new ThreeCodeTuple(".global", "main"));
-      instructions.add(new ThreeCodeTuple("main:"));
     }
 
     public String toString() {

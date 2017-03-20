@@ -44,7 +44,8 @@
   <target name="parser" depends="scanner">
     <antlr4 src="${src}/decaf/DecafParser.g4" package="decaf">
       <args>
-  		<arg value="-o"/>
+  		<arg value="-visitor"/>
+      <arg value="-o"/>
     		<arg value="src/decaf"/>
   		<arg value="-lib"/>
   		<arg value="${src}/decaf/"/>
