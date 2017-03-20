@@ -1,11 +1,8 @@
 class program {
   void main() {
     int a;
-    if (true && false && true) {
+    if (true && true) {
       a = 1 + 1;
-    }
-    else {
-      a = 2 + 2;
     }
   }
 }

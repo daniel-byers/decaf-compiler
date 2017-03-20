@@ -1,0 +1,11 @@
+class program {
+  void main() {
+    if (true && false) {
+      int a;
+      a = 10 * 10;
+    } else {
+      int a;
+      a = 1 + 2;
+    }
+  }
+}

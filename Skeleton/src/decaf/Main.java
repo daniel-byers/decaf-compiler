@@ -223,6 +223,9 @@ public class Main {
 
   private static void buildLowLevelIR(ParseTree tree) {
     LowLevelIRBuilder builder = new LowLevelIRBuilder();
+    // builder.visit(tree);
+
+    // visitor method
     ParseTreeWalker.DEFAULT.walk(builder, tree);
 
     if (CLI.target == CLI.ASSEMBLY)
