@@ -1,0 +1,13 @@
+class program {
+void foo(int a) {
+  int a; // invalid as defined in formal parameters.
+  {
+    int a; // valid.
+    {
+      int a; // valid.
+      int a; // invalid as already defined in scope.
+    }
+  }
+  }
+  void main() {  }
+}

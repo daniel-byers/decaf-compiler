@@ -2,9 +2,32 @@
  * @author Daniel Byers | 13121312
  * 
  * This code builds on examples provided by the following book:
- * Parr, Terence (2012). The Definitive ANTLR 4 Reference. USA: The Pragmatic Bookshelf. 322.
+ * Parr, Terence. (2012). The Definitive ANTLR 4 Reference. USA: The Pragmatic Bookshelf. 322.
+ *
+ * and information gained from the following resources:
+ * [1] Aiken, Professor Alex. (2012). Compilers Stanford (Playlist). [Video files]. Retrieved from 
+ * https://www.youtube.com/playlist?list=PLFB9EC7B8FE963EB8. Last accessed 22nd Mar 2017.
+ *
+ * Bacon, Jason W.. (2011). Arrays in Assembly Language: Chapter 12. Memory and Arrays. Available: 
+ * http://www.cs.uwm.edu/classes/cs315/Bacon/Lecture/HTML/ch12s04.html. Last accessed 22nd Mar 2017.
+ *
+ * AMD (2013). AMD64 Architecture Programmer’s Manual Volume 1: Application Programming. Rev 3.20. 
+ * Online. p23-109.
+ *
+ * Intel (2016). Intel 64 and IA-32 Architectures Software Developer’s Manual. Online. p113-118.
+ *
+ * Thain, Prof. Douglas. (2015). Introduction to X86-64 Assembly for Compiler Writers. Available: 
+ * https://www3.nd.edu/~dthain/courses/cse40243/fall2015/intel-intro.html.
+ * Last accessed 22nd Mar 2017.
+ *
  */
 
+/*                                                                                                   TODO:  Code generator should emit code to perform these checks:
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  --      1. The subscript of an array must be in bounds. (BOUNDS command)
+                                                                                                      --      2. Control must not fall off the end of a method that is declared to return a result.
+                                                                                                      --    NOT (!) and urany MINUS (-x) need implementing
+
+*/
 package decaf;
 
 import org.antlr.v4.runtime.tree.*;
@@ -17,7 +40,7 @@ import java.io.*;
 class LowLevelIRBuilder extends DecafParserBaseListener {
   public LowLevelIRBuilder() {
     charList = new ArrayList<>();
-    for(char alphabet = 'a'; alphabet <= 'z'; alphabet++) charList.add(alphabet); // <<<<<<<<<<<<<<< TODO: Find a better way to populate the character list. This is crazy.
+    for(char alphabet = 'a'; alphabet <= 'z'; alphabet++) charList.add(alphabet);
     charListItr = charList.listIterator();
     variableRegisterMap = new HashMap<>();
     exprResultRegisterMap = new ParseTreeProperty<>();
@@ -41,7 +64,9 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   // will represent the sequence of low level instructions to be generated.
   InstructionSet programInstructionSet = new InstructionSet();
 
-  public void enterMethodDecl(DecafParser.MethodDeclContext ctx) { 
+  ArrayList<ThreeCodeTuple> dataSegment = new ArrayList<>();
+
+  public void enterMethodDecl(DecafParser.MethodDeclContext ctx) { // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<< TODO: Add registers for formal parameters.
     programInstructionSet.addInstruction(labelTuple(ctx.methodName().IDENTIFIER().getText() + ":"));
   }
 
@@ -55,10 +80,10 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   }
   
   /**
-    * This method is required to calculate where to insert jump to else statements when there is no
-    * else block.
-    * @param  ctx The BlockContext 
-    */
+   * This method is required to calculate where to insert jump to else statements when there is no
+   * else block.
+   * @param  ctx The BlockContext 
+   */
   public void exitBlock(DecafParser.BlockContext ctx) {
     blockIndexes_2.put(ctx, programInstructionSet.instructions.size());
   }
@@ -83,9 +108,21 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       else if (ctx.assignOp().ASSIGNMENTS() != null)
         programInstructionSet.addInstruction(subtractionTuple(v0, locationReg));
       else if (ctx.location().LBRACE() != null && ctx.location().RBRACE() != null) {
-        String exprValue = getExprValue(ctx.location().expr()).substring(1);
-        String r0 = variableRegisterMap.get(locationName + "_" + exprValue);
-        programInstructionSet.addInstruction(moveTuple(v0, r0));
+        String arrayIndex = getExprValue(ctx.location().expr());
+
+        addArrayIndexAddressToPointer("array_" + locationName, arrayIndex);
+
+        programInstructionSet.addInstruction(moveTuple(v0, "(%rbp)"));
+      }
+      else if (ctx.expr(0).location() != null) {
+        if (ctx.expr(0).location().LBRACE() != null && ctx.expr(0).location().RBRACE() != null) {
+          String arrayIndex = getExprValue(ctx.expr(0).location().expr());
+          locationName = ctx.expr(0).location().IDENTIFIER().getText();
+
+          addArrayIndexAddressToPointer("array_" + locationName, arrayIndex);
+
+          programInstructionSet.addInstruction(moveTuple("(%rbp)", locationReg));
+        }
       }
       else
         programInstructionSet.addInstruction(moveTuple(v0, locationReg));
@@ -174,52 +211,12 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     }
   }
 
-  public void handleCallout(DecafParser.MethodCallContext ctx) {
-    String calloutName = ctx.STRINGLITERAL().getText();
-    ListIterator calloutArgsItr = ctx.calloutArg().listIterator();        
-    List<String> registerList =
-      Arrays.asList(new String[]{"%rdi","%rsi","%rdx","%rcx","%r8","%r9"});
-    ListIterator registerListItr = registerList.listIterator();
-
-    while (calloutArgsItr.hasNext()) {
-      DecafParser.CalloutArgContext arg = (DecafParser.CalloutArgContext) calloutArgsItr.next();
-      if (arg.STRINGLITERAL() != null)
-        programInstructionSet.addInstruction(moveTuple(
-          arg.STRINGLITERAL().getText(), (String) registerListItr.next()));
-      if (arg.expr()          != null) 
-        programInstructionSet.addInstruction(moveTuple(
-         getExprValue(arg.expr()), (String) registerListItr.next()));
-    }
-
-    programInstructionSet.addInstruction(callTuple(calloutName));
-  }  
-
-  // public void handleCallout(DecafParser.MethodCallContext ctx) {
-  //   String calloutName = ctx.methodCall().STRINGLITERAL().getText();
-  //   ListIterator calloutArgsItr = ctx.methodCall().calloutArg().listIterator();        
-  //   List<String> registerList =
-  //     Arrays.asList(new String[]{"%rdi","%rsi","%rdx","%rcx","%r8","%r9"});
-  //   ListIterator registerListItr = registerList.listIterator();
-
-  //   while (calloutArgsItr.hasNext()) {
-  //     DecafParser.CalloutArgContext arg = (DecafParser.CalloutArgContext) calloutArgsItr.next();
-  //     if (arg.STRINGLITERAL() != null)
-  //       programInstructionSet.addInstruction(moveTuple(
-  //         arg.STRINGLITERAL().getText(), (String) registerListItr.next()));
-  //     if (arg.expr()          != null) 
-  //       programInstructionSet.addInstruction(moveTuple(
-  //        getExprValue(arg.expr()), (String) registerListItr.next()));
-  //   }
-
-  //   programInstructionSet.addInstruction(callTuple(calloutName));
-  // }
-
   public void enterVarDecl(DecafParser.VarDeclContext ctx) {
     ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
     while (indentifierListItr.hasNext()) {
       String identifierName = ( (TerminalNode) indentifierListItr.next() ).getText();
       String r0 = nextRegister();
-      programInstructionSet.addInstruction(moveTuple("$0", r0));
+      programInstructionSet.addInstruction(moveTuple("$0", r0)); // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< TODO: Potentially more efficient to use XOR with both operands as the same address than MOV
       variableRegisterMap.put(identifierName, r0);
     }
   }
@@ -238,22 +235,12 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       DecafParser.ArrayDeclContext arrayDecl =
         (DecafParser.ArrayDeclContext) arrayIndentifierListItr.next();      
       String identifierName = arrayDecl.IDENTIFIER().getText();    
-      String r0 = nextRegister();
-      programInstructionSet.addInstruction(moveTuple("$0", r0));
-      variableRegisterMap.put(identifierName, r0);
-
       int arraySize = Integer.parseInt(arrayDecl.INTLITERAL().getText());
-      for (int i = 0; i < arraySize; i++) {
-        r0 = nextRegister();
-        programInstructionSet.addInstruction(moveTuple("$0", r0));
-        variableRegisterMap.put(identifierName + "_" + Integer.toString(i), r0);
-      }
+
+      dataSegment.add(arrayDeclTuple("array_" + identifierName + ":", arraySize));
     }
   }
 
-  // TODO:  Integer literals evaluate to their integer value. Character literals evaluate to their 
-  //  --    integer ASCII values, e.g., ’A’ represents the integer 65. (The type of a character
-  //  --    literal is int.)
   public void enterExpr(DecafParser.ExprContext ctx) {
     if (ctx.methodCall() != null) {
       if (ctx.methodCall().CALLOUT() != null) {
@@ -275,6 +262,14 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       if      (v0.equals("true"))   programInstructionSet.addInstruction(moveTuple("$1", r0));
       else if (v0.equals("false"))  programInstructionSet.addInstruction(moveTuple("$0", r0));
         
+      exprResultRegisterMap.put(ctx, r0);
+    }
+    else if (ctx.CHARLITERAL() != null) {
+      String v0 = getExprValue(ctx);
+      String r0 = nextRegister();
+      int ascii = (int) v0.charAt(0);
+
+      programInstructionSet.addInstruction(moveTuple("$" + Integer.toString(ascii), r0));
       exprResultRegisterMap.put(ctx, r0);
     }
   }
@@ -367,16 +362,72 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
         exprResultRegisterMap.put(ctx, r0);
       }
     }
+    else if (ctx.LPAREN() != null && ctx.RPAREN() != null) {
+      String exprValue = getExprValue(ctx.expr(0));
+      exprResultRegisterMap.put(ctx, exprValue);
+    }
+  }
+
+  public void enterProgram(DecafParser.ProgramContext ctx) {
+    dataSegment.add(labelTuple(".data"));
   }
 
   public void exitProgram(DecafParser.ProgramContext ctx) {
+    // if the data segment has anything more than just it's label
+    if (dataSegment.size() > 1) programInstructionSet.addMultipleInstructions(dataSegment, -1);
+
     // checks register name generation
     // for (int i = 0;i <= 260 ; i++ ) System.out.println(nextRegister());
   }
 
+
+  public void handleCallout(DecafParser.MethodCallContext ctx) {
+    String calloutName = ctx.STRINGLITERAL().getText();
+    ListIterator calloutArgsItr = ctx.calloutArg().listIterator();        
+    List<String> registerList =
+      Arrays.asList(new String[]{"%rdi","%rsi","%rdx","%rcx","%r8","%r9"});
+    ListIterator registerListItr = registerList.listIterator();
+
+    while (calloutArgsItr.hasNext() && registerListItr.hasNext()) {
+      DecafParser.CalloutArgContext arg = (DecafParser.CalloutArgContext) calloutArgsItr.next();
+      if (arg.STRINGLITERAL() != null)
+        programInstructionSet.addInstruction(moveTuple(
+          arg.STRINGLITERAL().getText(), (String) registerListItr.next()));
+      if (arg.expr()          != null) 
+        programInstructionSet.addInstruction(moveTuple(
+         getExprValue(arg.expr()), (String) registerListItr.next()));
+    }
+
+    if (calloutArgsItr.hasNext()) {
+      System.out.println("there are remaining arguments that need to be added to the stack");
+
+    }
+
+    programInstructionSet.addInstruction(callTuple(calloutName));
+  }
+
+  /**
+   *  Calculates the memory address related to the element of the array defined in the source code.
+   *  Loads the base address into the base pointer register, subtracts 1 as arrays start at index 0,
+   *  multiplies the value by 4 as 32-bit integers occupy 4 bytes of memory each, adds the offset 
+   *  to the base address, and stores the final result back into the base pointer.
+   *  @param  arrayName   The name of the array to access.
+   *  @param  arrayIndex  The element of the array to access.
+   */
+  public void addArrayIndexAddressToPointer(String arrayName, String arrayIndex) {
+    String r0 = nextRegister();
+
+    programInstructionSet.addInstruction(loadEffectiveAddressTuple(arrayName));
+    programInstructionSet.addInstruction(moveTuple(arrayIndex, r0));
+    programInstructionSet.addInstruction(subtractionTuple("$1", r0));
+    programInstructionSet.addInstruction(multiplicationTuple("$4", r0));
+    programInstructionSet.addInstruction(additionTuple(r0, "%rbp"));
+  }
+
+
   /**
    *  This method is responsible for generating the names of the registers to use in the IR. Whilst
-   *  watching the following tutorial (), I learned that in IR it is very common to use more
+   *  watching the following tutorial[1], I learned that in IR it is very common to use more
    *  registers than the machine architecture actually has. As this is common practice in industry,
    *  this design practice has been used here. In this way, a Decaf program can have an infinite
    *  number of registers. After this IR, optimisation is done to map many different variables down
@@ -398,25 +449,41 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     return register;
   }
 
+  /**
+   * Keeps track of the amount of IF statements in the source code so that they can be referenced
+   * individually.
+   * @return  String  The current value of the counter as a String.
+   */
   public String nextIfLabelNumber() {
     ifLabelCounter++;
     return Integer.toString(ifLabelCounter);
   }
 
+  /**
+   * Keeps track of the amount of FOR LOOPS in the source code so that they can be referenced
+   * individually.
+   * @return  String  The current value of the counter as a String.
+   */
   public String nextForLabelNumber() {
     forLabelCounter++;
     return Integer.toString(forLabelCounter);
   }
 
+  /**
+   *  An expression can have one of two possible values that are stored in different places:
+   *  variableRegisterMap holds the register associated with a given location (variable),
+   *  exprResultRegisterMap holds the register of the result of an expression (e.g. expr + expr),
+   *  Main.exprValues is populated with the value of an literal int, boolean or char character.
+   *  If an expression has been used and resides in a register, that register is returned. If not,
+   *  the actual value from the source code is returned as a constant.
+   *  @param  ctx     The context object of the expression that a value is needed for.
+   *  @return String  Either a register if initialised or constant (int) if not.
+   */
   public String getExprValue(DecafParser.ExprContext ctx) {
-    try { 
+    try {
       String locationName = ctx.location().IDENTIFIER().getText();
-      if (ctx.location().LBRACE() != null && ctx.location().RBRACE() != null) {
-        String exprValue = getExprValue(ctx.location().expr()).substring(1);
-        return variableRegisterMap.get(locationName + "_" + exprValue);
-      }
-      else return variableRegisterMap.get(locationName);
-    } catch (NullPointerException npe) {}
+      return variableRegisterMap.get(locationName);
+    } catch (NullPointerException npe) {  }
 
     String tmp_r0 = exprResultRegisterMap.get(ctx);
     String tmp_v  = Main.exprValues.get(ctx);
@@ -521,6 +588,24 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     return new ThreeCodeTuple(label);
   }
 
+  /**
+   *  Used to allocate the space in memory for the new array.
+   *  The .space directive allocates bytes; so the array size needs to be multiplied by 4 (32 bits).
+   *  @param  name  The name of the new array.
+   *  @param  size  The size of the new array.
+   */
+  public ThreeCodeTuple arrayDeclTuple(String name, int size) {
+    return new ThreeCodeTuple(name, ".space " + Integer.toString(size * 4));
+  } 
+
+  /**
+   *  Store in %rbp, the start address in memory for the provided label
+   *  @param  label The name relating to the data in memory
+   */
+  public ThreeCodeTuple loadEffectiveAddressTuple(String label) {
+    return new ThreeCodeTuple("lea", label, "%rbp");
+  }
+
   class ThreeCodeTuple {
     public ThreeCodeTuple(String command, String source, String destination) {
       this.command = command;
@@ -559,8 +644,9 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       instructions.add(index, instruction);
     }
 
-    public void addMultipleInstructions(ArrayList<ThreeCodeTuple> instructionList, int index) { 
-      instructions.addAll(index, instructionList);
+    public void addMultipleInstructions(ArrayList<ThreeCodeTuple> instructionList, int index) {
+      if (index == -1)  instructions.addAll(instructionList);
+      else              instructions.addAll(index, instructionList);
     }
 
     public void removeLastInstructions(int amountToRemove) {

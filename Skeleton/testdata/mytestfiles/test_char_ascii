@@ -1,0 +1,10 @@
+class program {
+  void main() {
+    int a, b, c, d, e;
+    a = 'A';
+    b = 'B';
+    c = 'C';
+    d = 'D';
+    e = 'E';
+  }
+}
