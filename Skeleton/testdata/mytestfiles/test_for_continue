@@ -1,0 +1,14 @@
+class program {
+  void main() {
+    for i = 1, 10 {
+      for j = 1, 5 {
+        if (i == 5) {
+          continue; 
+        }
+      }
+      for k = 5, 10 {
+        continue;
+      }
+    }
+  }
+}

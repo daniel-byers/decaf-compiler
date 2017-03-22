@@ -1,0 +1,10 @@
+class program {
+  int a[11];
+
+  void main() {
+    int b;
+    a[10] = 5;
+    a[10] = b;
+    b = a[10];
+  }
+}

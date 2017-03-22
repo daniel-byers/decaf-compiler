@@ -1,0 +1,14 @@
+class program {
+  void main() {
+    for i = 1, 10 {
+      int a, b;
+      a = 1;
+      for j = 1, 5 {
+        break; 
+      }
+      for k = 5, 10 {
+        break;
+      }
+    }
+  }
+}

@@ -21,18 +21,20 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     charListItr = charList.listIterator();
     variableRegisterMap = new HashMap<>();
     exprResultRegisterMap = new ParseTreeProperty<>();
-    ifElseBlockIndexes = new ParseTreeProperty<>();
+    blockIndexes = new ParseTreeProperty<>();
+    blockIndexes_2 = new ParseTreeProperty<>();
   }
 
   private int registerCounter; 
   private int ifLabelCounter;
+  private int forLabelCounter;
   private List<Character> charList;
   private ListIterator charListItr;
   private Map<String, String> variableRegisterMap;
   private ParseTreeProperty<String> exprResultRegisterMap; 
-  private ParseTreeProperty<Integer> ifElseBlockIndexes; 
+  private ParseTreeProperty<Integer> blockIndexes, blockIndexes_2;
 
-  // This holds a list of ThreeCodeTuples in order that they are encounted in the tree, therefore,
+  // This holds a list of ThreeCodeTuples in order that they are encountered in the tree, therefore,
   // also the order in which they appear in the Decaf source code. Each callback will be responsible
   // for adding however many ThreeCodeTuple objects to the InstructionSet that are required to do 
   // the task it's designed to do. After complete traversal of the ParseTree, a list of instructions
@@ -43,27 +45,93 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     programInstructionSet.addInstruction(labelTuple(ctx.methodName().IDENTIFIER().getText() + ":"));
   }
 
+  public void exitMethodDecl(DecafParser.MethodDeclContext ctx) {
+    if (!ctx.methodName().IDENTIFIER().getText().equals("main"))
+      programInstructionSet.addInstruction(returnTuple());
+  }
+
   public void enterBlock(DecafParser.BlockContext ctx) {
-    ifElseBlockIndexes.put(ctx, programInstructionSet.instructions.size());
+    blockIndexes.put(ctx, programInstructionSet.instructions.size());
+  }
+  
+  /**
+    * This method is required to calculate where to insert jump to else statements when there is no
+    * else block.
+    * @param  ctx The BlockContext 
+    */
+  public void exitBlock(DecafParser.BlockContext ctx) {
+    blockIndexes_2.put(ctx, programInstructionSet.instructions.size());
+  }
+
+  public void enterStatement(DecafParser.StatementContext ctx) {
+    if (ctx.FOR() != null) {
+      String locationName = ctx.IDENTIFIER().getText();
+      String r0 = nextRegister();
+      variableRegisterMap.put(locationName, r0);
+    }
   }
 
   public void exitStatement(DecafParser.StatementContext ctx) {
     if (ctx.assignOp() != null) {
+
       String locationName = ctx.location().IDENTIFIER().getText();
       String locationReg = variableRegisterMap.get(locationName);
       String v0 = getExprValue(ctx.expr(0));
 
-      programInstructionSet.addInstruction(moveTuple(v0, locationReg));
+      if      (ctx.assignOp().ASSIGNMENTP() != null) 
+        programInstructionSet.addInstruction(additionTuple(v0, locationReg));
+      else if (ctx.assignOp().ASSIGNMENTS() != null)
+        programInstructionSet.addInstruction(subtractionTuple(v0, locationReg));
+      else if (ctx.location().LBRACE() != null && ctx.location().RBRACE() != null) {
+        String exprValue = getExprValue(ctx.location().expr()).substring(1);
+        String r0 = variableRegisterMap.get(locationName + "_" + exprValue);
+        programInstructionSet.addInstruction(moveTuple(v0, r0));
+      }
+      else
+        programInstructionSet.addInstruction(moveTuple(v0, locationReg));
+
     }
     else if (ctx.RETURN() != null) {
       String v0 = getExprValue(ctx.expr(0));
       programInstructionSet.addInstruction(moveTuple(v0, "%rax"));
     }
+    else if (ctx.FOR() != null) {
+      String locationName = ctx.IDENTIFIER().getText();
+      String r0 = variableRegisterMap.get(locationName);
+      String r1 = nextRegister();      
+      
+      String v0 = getExprValue(ctx.expr(0));
+      String v1 = getExprValue(ctx.expr(1));
+      
+      // String currentForNumber = Integer.toString(forLabelCounter);
+      String currentForNumber = nextForLabelNumber();
+      int forBlock = blockIndexes.get(ctx.block(0));
+      ArrayList<ThreeCodeTuple> tmp = new ArrayList<>();
 
-    String currentIfElseNumber = nextIfLabelNumber();
-    int elseBlockOffset = 0;
+      tmp.add(moveTuple(v0, r0));
+      tmp.add(moveTuple(v1, r1));
+      tmp.add(labelTuple("startfor_" + currentForNumber + ":"));
+      
+      programInstructionSet.addMultipleInstructions(tmp, forBlock);
+      programInstructionSet.addInstruction(additionTuple("$1", r0));
+      programInstructionSet.addInstruction(cmpTuple(r0, r1));
+      programInstructionSet.addInstruction(jumpNotEqualTuple("startfor_" + currentForNumber));
+      programInstructionSet.addInstruction(labelTuple("endfor_" + currentForNumber + ":"));
+    }
+    else if (ctx.BREAK() != null) {
+      // The break always hits before the forLabelCounter is incremented so 1 is added to balance.
+      programInstructionSet.addInstruction(
+        jumpTuple("endfor_" + Integer.toString(forLabelCounter + 1)));
+    }
+    else if (ctx.CONTINUE() != null) {
+      // The continue always hits before the forLabelCounter is incremented so 1 is added to balance
+      programInstructionSet.addInstruction(
+        jumpTuple("startfor_" + Integer.toString(forLabelCounter + 1)));
+    }
+    else if (ctx.IF() != null) {
+      String currentIfElseNumber = nextIfLabelNumber();
+      int elseBlockOffset = 0;
     
-    if (ctx.IF()    != null) {
       String v0 = getExprValue(ctx.expr(0));
       String r0 = nextRegister();
       ArrayList<ThreeCodeTuple> tmp = new ArrayList<>();
@@ -78,22 +146,73 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       tmp.add(jumpEqualTuple("else_" + currentIfElseNumber));
       tmp.add(labelTuple("if_" + currentIfElseNumber + ":"));
 
-      Integer ifBlock = ifElseBlockIndexes.get(ctx.block(0));
+      Integer ifBlock = blockIndexes.get(ctx.block(0));
       programInstructionSet.addMultipleInstructions(tmp, ifBlock);
 
       elseBlockOffset = tmp.size();
-    }
-    
-    if (ctx.ELSE()  != null) {
-      Integer elseBlock = ifElseBlockIndexes.get(ctx.block(1)) + elseBlockOffset;
-      // Jump to endif always comes just before the else block.
-      programInstructionSet.addInstruction(
-        jumpTuple("endif_" + currentIfElseNumber), elseBlock - 1);
+      Integer elseBlock;
+      try {
+        elseBlock = blockIndexes.get(ctx.block(1)) + elseBlockOffset;
+      } catch (NullPointerException npe) {
+        elseBlock = blockIndexes_2.get(ctx.block(0)) + elseBlockOffset;
+      }
+      
       programInstructionSet.addInstruction(
         labelTuple("else_" + currentIfElseNumber + ":"), elseBlock);
-      programInstructionSet.addInstruction(labelTuple("endif_" + currentIfElseNumber + ":"));
+
+      if (ctx.ELSE() != null) {
+        // Jump to endif always comes just before the else block.
+        programInstructionSet.addInstruction(
+            jumpTuple("endif_" + currentIfElseNumber), elseBlock);
+        programInstructionSet.addInstruction(labelTuple("endif_" + currentIfElseNumber + ":"));
+      }
+    }
+    else if (ctx.methodCall() != null) {
+      if (ctx.methodCall().CALLOUT() != null) {
+        handleCallout(ctx.methodCall());
+      }
     }
   }
+
+  public void handleCallout(DecafParser.MethodCallContext ctx) {
+    String calloutName = ctx.STRINGLITERAL().getText();
+    ListIterator calloutArgsItr = ctx.calloutArg().listIterator();        
+    List<String> registerList =
+      Arrays.asList(new String[]{"%rdi","%rsi","%rdx","%rcx","%r8","%r9"});
+    ListIterator registerListItr = registerList.listIterator();
+
+    while (calloutArgsItr.hasNext()) {
+      DecafParser.CalloutArgContext arg = (DecafParser.CalloutArgContext) calloutArgsItr.next();
+      if (arg.STRINGLITERAL() != null)
+        programInstructionSet.addInstruction(moveTuple(
+          arg.STRINGLITERAL().getText(), (String) registerListItr.next()));
+      if (arg.expr()          != null) 
+        programInstructionSet.addInstruction(moveTuple(
+         getExprValue(arg.expr()), (String) registerListItr.next()));
+    }
+
+    programInstructionSet.addInstruction(callTuple(calloutName));
+  }  
+
+  // public void handleCallout(DecafParser.MethodCallContext ctx) {
+  //   String calloutName = ctx.methodCall().STRINGLITERAL().getText();
+  //   ListIterator calloutArgsItr = ctx.methodCall().calloutArg().listIterator();        
+  //   List<String> registerList =
+  //     Arrays.asList(new String[]{"%rdi","%rsi","%rdx","%rcx","%r8","%r9"});
+  //   ListIterator registerListItr = registerList.listIterator();
+
+  //   while (calloutArgsItr.hasNext()) {
+  //     DecafParser.CalloutArgContext arg = (DecafParser.CalloutArgContext) calloutArgsItr.next();
+  //     if (arg.STRINGLITERAL() != null)
+  //       programInstructionSet.addInstruction(moveTuple(
+  //         arg.STRINGLITERAL().getText(), (String) registerListItr.next()));
+  //     if (arg.expr()          != null) 
+  //       programInstructionSet.addInstruction(moveTuple(
+  //        getExprValue(arg.expr()), (String) registerListItr.next()));
+  //   }
+
+  //   programInstructionSet.addInstruction(callTuple(calloutName));
+  // }
 
   public void enterVarDecl(DecafParser.VarDeclContext ctx) {
     ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
@@ -122,6 +241,13 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       String r0 = nextRegister();
       programInstructionSet.addInstruction(moveTuple("$0", r0));
       variableRegisterMap.put(identifierName, r0);
+
+      int arraySize = Integer.parseInt(arrayDecl.INTLITERAL().getText());
+      for (int i = 0; i < arraySize; i++) {
+        r0 = nextRegister();
+        programInstructionSet.addInstruction(moveTuple("$0", r0));
+        variableRegisterMap.put(identifierName + "_" + Integer.toString(i), r0);
+      }
     }
   }
 
@@ -130,11 +256,17 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   //  --    literal is int.)
   public void enterExpr(DecafParser.ExprContext ctx) {
     if (ctx.methodCall() != null) {
-      String r0 = nextRegister();
-      programInstructionSet.addInstruction(
-        jumpTuple(ctx.methodCall().methodName().IDENTIFIER().getText()));
-      programInstructionSet.addInstruction(moveTuple("%rax", r0));
-      exprResultRegisterMap.put(ctx, r0);
+      if (ctx.methodCall().CALLOUT() != null) {
+        handleCallout(ctx.methodCall());
+        exprResultRegisterMap.put(ctx, "%rax");
+      }
+      else { 
+        String r0 = nextRegister();
+        programInstructionSet.addInstruction(
+          callTuple(ctx.methodCall().methodName().IDENTIFIER().getText()));
+        programInstructionSet.addInstruction(moveTuple("%rax", r0));
+        exprResultRegisterMap.put(ctx, r0);
+      }
     }
     else if (ctx.BOOLEANLITERAL() != null) {
       String v0 = getExprValue(ctx);
@@ -271,9 +403,20 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     return Integer.toString(ifLabelCounter);
   }
 
+  public String nextForLabelNumber() {
+    forLabelCounter++;
+    return Integer.toString(forLabelCounter);
+  }
+
   public String getExprValue(DecafParser.ExprContext ctx) {
-    try   { return variableRegisterMap.get(ctx.location().IDENTIFIER().getText()); }
-    catch (NullPointerException npe) {}
+    try { 
+      String locationName = ctx.location().IDENTIFIER().getText();
+      if (ctx.location().LBRACE() != null && ctx.location().RBRACE() != null) {
+        String exprValue = getExprValue(ctx.location().expr()).substring(1);
+        return variableRegisterMap.get(locationName + "_" + exprValue);
+      }
+      else return variableRegisterMap.get(locationName);
+    } catch (NullPointerException npe) {}
 
     String tmp_r0 = exprResultRegisterMap.get(ctx);
     String tmp_v  = Main.exprValues.get(ctx);

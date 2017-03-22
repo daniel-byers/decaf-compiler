@@ -329,18 +329,51 @@ class SemanticRuleManager extends DecafParserBaseListener {
                                     && ctx.expr(0).location().RBRACE() != null;
 
               // left hand side is an array index but right hand side is an array
-              if      (lhsIsIndex == true && rhsIsIndex == false)
+              if      (lhsIsIndex && !rhsIsIndex)
                 errorHandler.handleError("multi-dimensional arrays are not permitted.", ctx.start);
               // both sides are arrays but their sizes are different.
               else if (((ArrayVariableSymbol) location).size != ((ArrayVariableSymbol) variable).size)
                 errorHandler.handleError("arrays can only be assigned to similar sized arrays.",
                   ctx.start);
               // left hand side is an array, right hand side is an array index
-              else if (lhsIsIndex == false && rhsIsIndex == true)
+              else if (!lhsIsIndex && rhsIsIndex)
                 errorHandler.handleError(exprType + " cannot be converted to " + location.type
                   + "[]", ctx.start);
             }
           }
+
+          // Need to check to ensure array index assignments aren't explicitly out of bounds.
+          // Three possible, explicit, cases;
+          // 1) lhs of assignment is array with scalar index and rhs is scalar      ; a[1] = 5;
+          // 2) lhs of assignment is array with scalar index and rhs is variable    ; a[1] = b; 
+          // 3) lhs of assignment is variable and rhs is array with scalar index    ; b = a[1]; 
+
+          // Mock object to avoid null pointers in case 2.
+          Object variable = new Object();
+
+          if (ctx.expr(0).location() != null)
+            variable = (Symbol) currentScope.resolve(ctx.expr(0).location().IDENTIFIER().getText());
+
+          boolean lhsArray = location instanceof ArrayVariableSymbol;
+          boolean rhsArray = variable instanceof ArrayVariableSymbol;
+
+          // Check left hand side array index isn't explicitly out of bounds
+          if      (lhsArray) {
+            int arrayIndex = Integer.parseInt(ctx.location().expr().INTLITERAL().getText());
+            int arraySize = ( (ArrayVariableSymbol) location ).size;
+
+            if (arrayIndex >= arraySize)
+              errorHandler.handleError("Array index out of bounds! Size: " + arraySize, ctx.start);
+          }
+          // Check right hand side array index isn't explicitly out of bounds
+          else if (rhsArray) {
+            int arrayIndex = Integer.parseInt(ctx.expr(0).location().expr().getText());
+            int arraySize = ( (ArrayVariableSymbol) variable ).size;
+              
+            if (arrayIndex >= arraySize)
+              errorHandler.handleError("Array index out of bounds! Size: " + arraySize, ctx.start);
+          }
+
         }
         else if (ctx.assignOp().ASSIGNMENTP() != null || ctx.assignOp().ASSIGNMENTS() != null) {
           // 16. The location and the expr in an incrementing assignment: `location += expr`
