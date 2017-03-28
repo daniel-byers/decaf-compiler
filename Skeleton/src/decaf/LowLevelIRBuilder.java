@@ -398,9 +398,7 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
          getExprValue(arg.expr()), (String) registerListItr.next()));
     }
 
-    if (calloutArgsItr.hasNext()) {
-      System.out.println("there are remaining arguments that need to be added to the stack");
-
+    if (calloutArgsItr.hasNext()) { // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< TODO: Remaining arguments need to be put on stack in reverse order.
     }
 
     programInstructionSet.addInstruction(callTuple(calloutName));
@@ -589,23 +587,33 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   }
 
   /**
-   *  Used to allocate the space in memory for the new array.
-   *  The .space directive allocates bytes; so the array size needs to be multiplied by 4 (32 bits).
-   *  @param  name  The name of the new array.
-   *  @param  size  The size of the new array.
+   * Used to allocate the space in memory for the new array.
+   * The .space directive allocates bytes; so the array size needs to be multiplied by 4 (32 bits).
+   * Logically, a boolean element only needs 1 bit, however, on some architectures they fill 1 byte,
+   * and as size shouldn't be an issue, I am going to leave this 4 bytes per element. Good place to
+   * start for optimisation.
+   * @param  name  The name of the new array.
+   * @param  size  The size of the new array.
    */
   public ThreeCodeTuple arrayDeclTuple(String name, int size) {
     return new ThreeCodeTuple(name, ".space " + Integer.toString(size * 4));
   } 
 
   /**
-   *  Store in %rbp, the start address in memory for the provided label
-   *  @param  label The name relating to the data in memory
+   * Store in %rbp: the start address in memory for the provided label.
+   * @param  label The name relating to the data in memory
    */
   public ThreeCodeTuple loadEffectiveAddressTuple(String label) {
     return new ThreeCodeTuple("lea", label, "%rbp");
   }
 
+  /**
+   * An object to encapsulate the information of a Three-code tuple that is made up of, at most, 
+   * three individual parts. Constructor overloading allows either 1, 2 or 3 parts to be passed in
+   * during construction.
+   * Note, this class could be in it's own file, however, it wont be used by any other part of the
+   * application so I think it is best practice to keep it with the code using it.
+   */
   class ThreeCodeTuple {
     public ThreeCodeTuple(String command, String source, String destination) {
       this.command = command;
@@ -634,6 +642,13 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     }
   }
 
+  /**
+   * Class to wrap a List of ThreeCodeTuples. Indexes are manipulated to ensure that assembly code
+   * is written in the correct sequence. The decision to use this over the Visitor pattern is due to
+   * the simplicity of inserting/moving nodes in a list vs designing a complex tree traversal.
+   * Note, this class could be in it's own file, however, it wont be used by any other part of the
+   * application so I think it is best practice to keep it with the code using it.
+   */
   public class InstructionSet {
     public InstructionSet() { addDefaultInstructions(); }
     public List<ThreeCodeTuple> instructions = new ArrayList<>();
