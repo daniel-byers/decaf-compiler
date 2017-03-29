@@ -13,6 +13,10 @@ import java.util.*;
 import java.io.*;
 import java.nio.file.*;
 
+/**
+ * The Error handler for my Decaf program. Stores each error in a list and provides pretty printing
+ * of the set of errors encountered in one compilation.
+ */
 public class ErrorHandler {
   public ErrorHandler() {
     try {

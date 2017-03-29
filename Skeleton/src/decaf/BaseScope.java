@@ -9,6 +9,9 @@ package decaf;
 
 import java.util.*;
 
+/**
+ * This class is used to define the basic methods requried by a Scope.
+ */
 public abstract class BaseScope implements Scope {
   public BaseScope(Scope enclosingScope) { this.enclosingScope = enclosingScope;  }
 

@@ -7,8 +7,11 @@
 
 package decaf;
 
+/**
+ * Expressions can be grouped into categories by what methods exist under each context object. This
+ * logic is quite ugly so it's been abstracted away into it's own class making it reusable.
+ */
 public class ExpressionOperationRules {
-  // some arithmetic expressions set the type to different things. Best way to distinguish is here.
   public static boolean arithmeticBinaryOperation(DecafParser.ExprContext ctx) {
     return arithmeticReturnsInteger(ctx) || arithmeticReturnsBoolean(ctx);
   }

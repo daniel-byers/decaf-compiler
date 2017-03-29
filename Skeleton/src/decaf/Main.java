@@ -37,7 +37,7 @@ public class Main {
 
   /**
    * Constructor used for adding extra listeners. Will help later in testing as we can inject a
-   * listener that doesn't write out to a file or to stdout; removing the need for I/O.
+   * listener that doesn't write out to a file or to stdout; removing the need for I/O. Not used.
    * @param listeners Array of listeners to add to the Lexer and Parser.
    */
   public Main(ANTLRErrorListener[] listeners) { _extraErrorListeners = listeners; }
@@ -90,9 +90,6 @@ public class Main {
         // The first argument into parse is the arguments supplied from the command line, the second
         // is an empty array of optional arguments which aren't used.
 
-        // TODO: ACTUALLY! We want to pass in all flags as well, eg. CLI needs -target so the string
-        //  --   array from tesing will be in index 1, index 0 must be the usual arguments from the
-        //  --   CLI.
         CLI.parse(args, new String[0]);
 
         if    (args.length == 0)  inputStream = System.in; 
@@ -190,6 +187,7 @@ public class Main {
    */
   protected static void generateCode(ParseTree tree) {
     buildLowLevelIR(tree);
+    allocateRegisters();
   }
 
   /** 
@@ -233,6 +231,15 @@ public class Main {
     
     if (CLI.debug) System.out.println(builder.programInstructionSet.toString());
   }
+
+  /**
+   * Next stage of the compiler is to take all the temporaries created during low level IR buidling
+   * and map these temporaries to registers in such a way that the same register doesn't hold two
+   * temporaries that are live at the same time. First a liveness graph is created, then once that
+   * has been defined a Register Interference Graph (RIG) is drawn to show which temporaries can
+   * share a register. Finally, graph colouring is used to assign the registers.
+   */
+  private static void allocateRegisters() {}
 
   /**
    * Creates a Swing frame object and prints the AST in a graphical form. Useful for debugging.

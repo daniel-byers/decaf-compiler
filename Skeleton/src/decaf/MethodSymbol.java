@@ -10,6 +10,10 @@ package decaf;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Extends the Symbol class to allow all the information about a Method to be stored in an onject.
+ * A Method has it's own scope in which it's formal parameters are defined.
+ */
 public class MethodSymbol extends Symbol implements Scope {
   public MethodSymbol(String name, Type returnType, Scope enclosingScope) {
     super(name, returnType);

@@ -8,11 +8,11 @@
  * [1] Aiken, Professor Alex. (2012). Compilers Stanford (Playlist). [Video files]. Retrieved from 
  * https://www.youtube.com/playlist?list=PLFB9EC7B8FE963EB8. Last accessed 22nd Mar 2017.
  *
- * Bacon, Jason W.. (2011). Arrays in Assembly Language: Chapter 12. Memory and Arrays. Available: 
- * http://www.cs.uwm.edu/classes/cs315/Bacon/Lecture/HTML/ch12s04.html. Last accessed 22nd Mar 2017.
- *
  * AMD (2013). AMD64 Architecture Programmer’s Manual Volume 1: Application Programming. Rev 3.20. 
  * Online. p23-109.
+ *
+ * Bacon, Jason W.. (2011). Arrays in Assembly Language: Chapter 12. Memory and Arrays. Available: 
+ * http://www.cs.uwm.edu/classes/cs315/Bacon/Lecture/HTML/ch12s04.html. Last accessed 22nd Mar 2017.
  *
  * Intel (2016). Intel 64 and IA-32 Architectures Software Developer’s Manual. Online. p113-118.
  *
@@ -22,12 +22,13 @@
  *
  */
 
-/*                                                                                                   TODO:  Code generator should emit code to perform these checks:
->>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  --      1. The subscript of an array must be in bounds. (BOUNDS command)
-                                                                                                      --      2. Control must not fall off the end of a method that is declared to return a result.
-                                                                                                      --    NOT (!) and urany MINUS (-x) need implementing
-
+/*
+  TODO:  Code generator should emit code to perform these checks:
+  --      1. The subscript of an array must be in bounds. (BOUNDS command)
+  --      2. Control must not fall off the end of a method that is declared to return a result.
+  --     NOT (!) and urany MINUS (-x) need implementing
 */
+
 package decaf;
 
 import org.antlr.v4.runtime.tree.*;
@@ -66,15 +67,30 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
 
   ArrayList<ThreeCodeTuple> dataSegment = new ArrayList<>();
 
-  public void enterMethodDecl(DecafParser.MethodDeclContext ctx) { // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<< TODO: Add registers for formal parameters.
-    programInstructionSet.addInstruction(labelTuple(ctx.methodName().IDENTIFIER().getText() + ":"));
+  /**
+   * Adds the label denoting the start of a new method so as to allows jumps later.
+   * @param ctx The MethodDeclContext object defined in DecafParser. Generated at compile time.
+   */
+  public void enterMethodDecl(DecafParser.MethodDeclContext ctx) {
+    String methodName = ctx.methodName().IDENTIFIER().getText();
+    programInstructionSet.addInstruction(labelTuple(methodName + ":"));
   }
 
+  /**
+   * Adds a return statement at the end of every method (except main) so that control returns to the
+   * point on which it was called after the method body executes.
+   * @param ctx The MethodDeclContext object defined in DecafParser. Generated at compile time.
+   */
   public void exitMethodDecl(DecafParser.MethodDeclContext ctx) {
     if (!ctx.methodName().IDENTIFIER().getText().equals("main"))
       programInstructionSet.addInstruction(returnTuple());
   }
 
+  /**
+   * Calculates the index of the instruction set of where the block exits so that else block code
+   * can be inserted in the correct order.
+   * @param ctx The BlockContext object defined in DecafParser. Generated at compile time.
+   */
   public void enterBlock(DecafParser.BlockContext ctx) {
     blockIndexes.put(ctx, programInstructionSet.instructions.size());
   }
@@ -82,12 +98,17 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
   /**
    * This method is required to calculate where to insert jump to else statements when there is no
    * else block.
-   * @param  ctx The BlockContext 
+   * @param ctx The BlockContext object defined in DecafParser. Generated at compile time.
    */
   public void exitBlock(DecafParser.BlockContext ctx) {
     blockIndexes_2.put(ctx, programInstructionSet.instructions.size());
   }
 
+  /**
+   * Adds each location to the register map so the current temporary register holding a variable is
+   * mapped to the name of the variable.
+   * @param ctx The StatementContext object defined in DecafParser. Generated at compile time.
+   */
   public void enterStatement(DecafParser.StatementContext ctx) {
     if (ctx.FOR() != null) {
       String locationName = ctx.IDENTIFIER().getText();
@@ -96,6 +117,10 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     }
   }
 
+  /**
+   * Controls the logic for statements in Decaf.
+   * @param ctx The StatementContext object defined in DecafParser. Generated at compile time.
+   */
   public void exitStatement(DecafParser.StatementContext ctx) {
     if (ctx.assignOp() != null) {
 
@@ -107,7 +132,7 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
         programInstructionSet.addInstruction(additionTuple(v0, locationReg));
       else if (ctx.assignOp().ASSIGNMENTS() != null)
         programInstructionSet.addInstruction(subtractionTuple(v0, locationReg));
-      else if (ctx.location().LBRACE() != null && ctx.location().RBRACE() != null) {
+      else if (ctx.location().LBRACE() != null && ctx.location().RBRACE() != null) { // lhs array
         String arrayIndex = getExprValue(ctx.location().expr());
 
         addArrayIndexAddressToPointer("array_" + locationName, arrayIndex);
@@ -115,6 +140,7 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
         programInstructionSet.addInstruction(moveTuple(v0, "(%rbp)"));
       }
       else if (ctx.expr(0).location() != null) {
+        // rhs array
         if (ctx.expr(0).location().LBRACE() != null && ctx.expr(0).location().RBRACE() != null) {
           String arrayIndex = getExprValue(ctx.expr(0).location().expr());
           locationName = ctx.expr(0).location().IDENTIFIER().getText();
@@ -140,11 +166,12 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       String v0 = getExprValue(ctx.expr(0));
       String v1 = getExprValue(ctx.expr(1));
       
-      // String currentForNumber = Integer.toString(forLabelCounter);
       String currentForNumber = nextForLabelNumber();
       int forBlock = blockIndexes.get(ctx.block(0));
       ArrayList<ThreeCodeTuple> tmp = new ArrayList<>();
 
+      // Creates a temporary sub list of instructions that will be inserted into the list at the
+      // index of the FOR-loop block
       tmp.add(moveTuple(v0, r0));
       tmp.add(moveTuple(v1, r1));
       tmp.add(labelTuple("startfor_" + currentForNumber + ":"));
@@ -205,42 +232,55 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
       }
     }
     else if (ctx.methodCall() != null) {
-      if (ctx.methodCall().CALLOUT() != null) {
-        handleCallout(ctx.methodCall());
-      }
+      if (ctx.methodCall().CALLOUT() != null) handleCallout(ctx.methodCall());
     }
   }
 
+  /**
+   * Creates a new register for each variable, initialises variable to zero and adds both to map.
+   * @param ctx The VarDeclContext object defined in DecafParser. Generated at compile time.
+   */
   public void enterVarDecl(DecafParser.VarDeclContext ctx) {
-    ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
-    while (indentifierListItr.hasNext()) {
-      String identifierName = ( (TerminalNode) indentifierListItr.next() ).getText();
+    ListIterator identifierListItr = ctx.IDENTIFIER().listIterator();
+    while (identifierListItr.hasNext()) {
+      String identifierName = ( (TerminalNode) identifierListItr.next() ).getText();
       String r0 = nextRegister();
       programInstructionSet.addInstruction(moveTuple("$0", r0)); // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< TODO: Potentially more efficient to use XOR with both operands as the same address than MOV
       variableRegisterMap.put(identifierName, r0);
     }
   }
 
+  /**
+   * Creates a new register for each global variable, initialises register to 0 and assigns the
+   * location to the variable map.
+   * For arrays, declares space in memory and adds a label to access it in other parts of the code.
+   * @param ctx The FieldDeclContext object defined in DecafParser. Generated at compile time.
+   */
   public void enterFieldDecl(DecafParser.FieldDeclContext ctx) {
-    ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
-    while (indentifierListItr.hasNext()) {
-      String identifierName = ( (TerminalNode) indentifierListItr.next() ).getText();
+    ListIterator identifierListItr = ctx.IDENTIFIER().listIterator();
+    while (identifierListItr.hasNext()) {
+      String identifierName = ( (TerminalNode) identifierListItr.next() ).getText();
       String r0 = nextRegister();
       programInstructionSet.addInstruction(moveTuple("$0", r0));
       variableRegisterMap.put(identifierName, r0);
     }
 
-    ListIterator arrayIndentifierListItr = ctx.arrayDecl().listIterator();
-    while (arrayIndentifierListItr.hasNext()) {
+    ListIterator arrayidentifierListItr = ctx.arrayDecl().listIterator();
+    while (arrayidentifierListItr.hasNext()) {
       DecafParser.ArrayDeclContext arrayDecl =
-        (DecafParser.ArrayDeclContext) arrayIndentifierListItr.next();      
+        (DecafParser.ArrayDeclContext) arrayidentifierListItr.next();      
       String identifierName = arrayDecl.IDENTIFIER().getText();    
       int arraySize = Integer.parseInt(arrayDecl.INTLITERAL().getText());
-
       dataSegment.add(arrayDeclTuple("array_" + identifierName + ":", arraySize));
     }
   }
 
+  /**
+   * Calculates the correct values of certain literals and adds those to the expr results map that
+   * keeps track of expression evaluation results. I.e. if 'true' is written in the source code then
+   * '1' is placed in a register and mapped to that token.
+   * @param ctx The ExprContext object defined in DecafParser. Generated at compile time.
+   */
   public void enterExpr(DecafParser.ExprContext ctx) {
     if (ctx.methodCall() != null) {
       if (ctx.methodCall().CALLOUT() != null) {
@@ -274,6 +314,11 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     }
   }
 
+  /**
+   * Adds the required sequence of ThreeCodeTuple objects to the InstructionSet that is necessary to
+   * achieve the required arithmetic or boolean logic.
+   * @param ctx The ExprContext object defined in DecafParser. Generated at compile time.
+   */
   public void exitExpr(DecafParser.ExprContext ctx) {
     String v0 = getExprValue(ctx.expr(0));
     String v1 = getExprValue(ctx.expr(1));
@@ -368,19 +413,30 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     }
   }
 
+  /**
+   * Initialises the data region for the array declarations.
+   * @param ctx The ProgramContext object defined in DecafParser. Generated at compile time.
+   */
   public void enterProgram(DecafParser.ProgramContext ctx) {
     dataSegment.add(labelTuple(".data"));
   }
 
+
+  /**
+   * Adds all the contents of the data segment to the InstructionSet at the bottom so that they are
+   * present but segregated from the main body of instructions.
+   * @param ctx The ProgramContext object defined in DecafParser. Generated at compile time.
+   */
   public void exitProgram(DecafParser.ProgramContext ctx) {
     // if the data segment has anything more than just it's label
     if (dataSegment.size() > 1) programInstructionSet.addMultipleInstructions(dataSegment, -1);
-
-    // checks register name generation
-    // for (int i = 0;i <= 260 ; i++ ) System.out.println(nextRegister());
   }
 
 
+  /**
+   * Handles method calls to linked libraries.
+   * @param ctx The MethodCallContext object defined in DecafParser. Generated at compile time.
+   */
   public void handleCallout(DecafParser.MethodCallContext ctx) {
     String calloutName = ctx.STRINGLITERAL().getText();
     ListIterator calloutArgsItr = ctx.calloutArg().listIterator();        
@@ -398,7 +454,13 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
          getExprValue(arg.expr()), (String) registerListItr.next()));
     }
 
-    if (calloutArgsItr.hasNext()) { // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< TODO: Remaining arguments need to be put on stack in reverse order.
+    // Remaining args pushed to stack.
+    if (calloutArgsItr.hasNext()) {
+      DecafParser.CalloutArgContext arg = (DecafParser.CalloutArgContext) calloutArgsItr.next();
+      if (arg.STRINGLITERAL() != null)
+        programInstructionSet.addInstruction(pushTuple(arg.STRINGLITERAL().getText()));
+      if (arg.expr()          != null) 
+        programInstructionSet.addInstruction(pushTuple(getExprValue(arg.expr())));
     }
 
     programInstructionSet.addInstruction(callTuple(calloutName));
@@ -421,7 +483,6 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     programInstructionSet.addInstruction(multiplicationTuple("$4", r0));
     programInstructionSet.addInstruction(additionTuple(r0, "%rbp"));
   }
-
 
   /**
    *  This method is responsible for generating the names of the registers to use in the IR. Whilst
@@ -475,7 +536,7 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
    *  If an expression has been used and resides in a register, that register is returned. If not,
    *  the actual value from the source code is returned as a constant.
    *  @param  ctx     The context object of the expression that a value is needed for.
-   *  @return String  Either a register if initialised or constant (int) if not.
+   *  @return String  Either a register if initialised or constant if not.
    */
   public String getExprValue(DecafParser.ExprContext ctx) {
     try {
@@ -494,94 +555,178 @@ class LowLevelIRBuilder extends DecafParserBaseListener {
     else return null;
   }
 
+  /**
+   * Moves src to dest.
+   * @return String A ThreeCodeTuple object representing a move command.
+   */ 
   public ThreeCodeTuple moveTuple(String src, String dest) {
     return new ThreeCodeTuple("mov", src, dest);
   }
 
+  /**
+   * Moves src to dest if last comparison was equal.
+   * @return String A ThreeCodeTuple object representing a move command.
+   */ 
   public ThreeCodeTuple moveEqualTuple(String src, String dest) {
     return new ThreeCodeTuple("cmove", src, dest);
   }
 
+  /**
+   * Moves src to dest if last comparison was not equal.
+   * @return String A ThreeCodeTuple object representing a move command.
+   */ 
   public ThreeCodeTuple moveNotEqualTuple(String src, String dest) {
     return new ThreeCodeTuple("cmovne", src, dest);
   }
 
+  /**
+   * Moves src to dest if last comparison was greater than equal.
+   * @return String A ThreeCodeTuple object representing a move command.
+   */ 
   public ThreeCodeTuple moveGreaterThanTuple(String src, String dest) {
     return new ThreeCodeTuple("cmovg", src, dest);
   }
 
+  /**
+   * Moves src to dest if last comparison was less than equal.
+   * @return String A ThreeCodeTuple object representing a move command.
+   */ 
   public ThreeCodeTuple moveLessThanTuple(String src, String dest) {
     return new ThreeCodeTuple("cmovl", src, dest);
   }
 
+  /**
+   * Moves src to dest if last comparison was greater than or equal.
+   * @return String A ThreeCodeTuple object representing a move command.
+   */ 
   public ThreeCodeTuple moveGreaterThanEqualTuple(String src, String dest) {
     return new ThreeCodeTuple("cmovge", src, dest);
   }
 
+  /**
+   * Moves src to dest if last comparison was less than or equal.
+   * @return String A ThreeCodeTuple object representing a move command.
+   */ 
   public ThreeCodeTuple moveLessThanEqualTuple(String src, String dest) {
     return new ThreeCodeTuple("cmovle", src, dest);
   }
 
+  /**
+   * Creates a procedure stack frame.
+   * @return String A ThreeCodeTuple object representing an enter command.
+   */ 
   public ThreeCodeTuple enterTuple(String src, String dest) {
     return new ThreeCodeTuple("enter", src, dest);
   }
 
+  /**
+   * Cleans up the local stack and resets the '%rsp' and '%rbp'.
+   * @return String A ThreeCodeTuple object representing a leave command.
+   */ 
   public ThreeCodeTuple leaveTuple() {
     return new ThreeCodeTuple("leave");
   }
 
+  /**
+   * Copies a value to the stack pointed at by '%rsp' to src and decreases '%rsp'.
+   * @return String A ThreeCodeTuple object representing a push command.
+   */ 
   public ThreeCodeTuple pushTuple(String src) {
     return new ThreeCodeTuple("push", src);
   }
 
-  public ThreeCodeTuple popTuple(String src) {
-    return new ThreeCodeTuple("push", src);
+  /**
+   * Copies a value from the stack pointed at by '%rsp' to dest and increases '%rsp'.
+   * @return String A ThreeCodeTuple object representing a pop command.
+   */ 
+  public ThreeCodeTuple popTuple(String dest) {
+    return new ThreeCodeTuple("pop", dest);
   }
 
+  /**
+   * Calls a method or library function, passing control to the callee.
+   * @return String A ThreeCodeTuple object representing a call command.
+   */ 
   public ThreeCodeTuple callTuple(String target) {
     return new ThreeCodeTuple("call", target);
   }
 
+  /**
+   * Returns control from a method to the caller.
+   * @return  String  A ThreeCodeTuple object representing a return command.
+   */
   public ThreeCodeTuple returnTuple() {
     return new ThreeCodeTuple("ret");
   }
 
+  /**
+   * * Jumps to target unconditionally.
+   * @return  String  A ThreeCodeTuple object representing a jump command.
+   */
   public ThreeCodeTuple jumpTuple(String target) {
     return new ThreeCodeTuple("jmp", target);
   }
 
+  /**
+   * Jumps to target if the flag set from the last command is 1; equal.
+   * @return  String  A ThreeCodeTuple object representing a jump command.
+   */
   public ThreeCodeTuple jumpEqualTuple(String target) {
     return new ThreeCodeTuple("je", target);
   }
 
+  /**
+   * Jumps to target if the flag set from the last command is 0; not equal.
+   * @return  String  A ThreeCodeTuple object representing a jump command.
+   */
   public ThreeCodeTuple jumpNotEqualTuple(String target) {
     return new ThreeCodeTuple("jne", target);
   }
 
+  /**
+   * Compares two values and sets a flag depending on the result of src being greater than, equal to
+   * or less than dest.
+   * @return  String  A ThreeCodeTuple object representing a comparison command.
+   */
   public ThreeCodeTuple cmpTuple(String src, String dest) {
     return new ThreeCodeTuple("cmp", src, dest);
   }
   
-  // `add src, dest`: add src to dest.
+  /**
+   * `add src, dest`: add src to dest and store result in dest.
+   * @return  String  A ThreeCodeTuple object representing an addition command.
+   */
   public ThreeCodeTuple additionTuple(String num0, String num1) {
     return new ThreeCodeTuple("add", num0, num1);
   }
 
-  // `sub src, dest`: subtract source from dest
+  /**
+   * `sub src, dest`: subtract source from dest and store result in dest.
+   * @return  String  A ThreeCodeTuple object representing a label.
+   */
   public ThreeCodeTuple subtractionTuple(String num0, String num1) {
     return new ThreeCodeTuple("sub", num0, num1);
   }
 
-  // `imul src, dest`: multiply dest by source
+  /**
+   * `imul src, dest`: multiply dest by source and store result in dest.
+   *  @return  String  A ThreeCodeTuple object representing a multiplication command.
+   */
   public ThreeCodeTuple multiplicationTuple(String num0, String num1) {
     return new ThreeCodeTuple("imul", num0, num1);
   }
 
-  // `idiv divisor` Divide rdx:rax by divisor. Store quotient in rax and store remain in rdx.
+  /**
+   * `idiv divisor` Divide rdx:rax by divisor. Stores quotient in rax and store remain in rdx.
+   *  @return  String  A ThreeCodeTuple object representing a division command.
+   */
   public ThreeCodeTuple divisionTuple(String divisor) {
     return new ThreeCodeTuple("idiv", divisor);
   }
 
+  /**
+   * @return  String  A ThreeCodeTuple object representing a label.
+   */
   public ThreeCodeTuple labelTuple(String label) {
     return new ThreeCodeTuple(label);
   }

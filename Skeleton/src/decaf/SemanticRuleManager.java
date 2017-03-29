@@ -7,9 +7,6 @@
  * and information gained from the following resources:
  * Norling, Dr Emma (2017). Decaf Language Reference. Online. p1-8.
  *
- *
- * 
- *
  */
 
 package decaf;
@@ -48,7 +45,8 @@ class SemanticRuleManager extends DecafParserBaseListener {
     if (mainMethod == null)
       errorHandler.handleError("cannot find main()", ctx.start);
     else if (!mainMethod.formalParameters.isEmpty())
-      errorHandler.handleError("main() cannot take parameters", ctx.start); // <<<<<<<<<<<<<<<<<<<<< TODO: locate main token.
+      errorHandler.handleError("main() cannot take parameters", ctx.start);
+    if (CLI.debug) System.out.println(currentScope.toString());
   }
 
   /**
@@ -59,9 +57,9 @@ class SemanticRuleManager extends DecafParserBaseListener {
    * @param ctx The FieldDeclContext object defined in DecafParser. Generated at compile time.
    */
   public void enterFieldDecl(DecafParser.FieldDeclContext ctx) {
-    ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
-    while (indentifierListItr.hasNext()) {
-      String identifierName = ( (TerminalNode) indentifierListItr.next() ).getText();
+    ListIterator identifierListItr = ctx.IDENTIFIER().listIterator();
+    while (identifierListItr.hasNext()) {
+      String identifierName = ( (TerminalNode) identifierListItr.next() ).getText();
 
       if (currentScope.resolve(identifierName) == null) {
         VariableSymbol newVariableSymbol = 
@@ -74,10 +72,10 @@ class SemanticRuleManager extends DecafParserBaseListener {
           "variable '" + identifierName + "' has already been defined.", ctx.start);
     }
 
-    ListIterator arrayIndentifierListItr = ctx.arrayDecl().listIterator();
-    while (arrayIndentifierListItr.hasNext()) {
+    ListIterator arrayidentifierListItr = ctx.arrayDecl().listIterator();
+    while (arrayidentifierListItr.hasNext()) {
       DecafParser.ArrayDeclContext arrayDecl =
-        (DecafParser.ArrayDeclContext) arrayIndentifierListItr.next();
+        (DecafParser.ArrayDeclContext) arrayidentifierListItr.next();
 
       ArrayVariableSymbol newArrayVariableSymbol = new ArrayVariableSymbol(
         arrayDecl.IDENTIFIER().getText(), Symbol.getType(ctx.type().start.getType()), 
@@ -97,6 +95,11 @@ class SemanticRuleManager extends DecafParserBaseListener {
         "array '" + ctx.IDENTIFIER() + "' cannot have a size of zero", ctx.start);
   }
 
+  // This is a flag to ensure that if a method is declared to return a type then a return statement
+  // is present somewhere in the method declaration. Will be set to true if the method return type
+  // is void and also if a return is encountered at some point before method exits.
+  boolean returnFound;
+
   /**
    * Creates MethodSymbols that encapsulate a method, it's formal parameters and "pushes" a new
    * scope to the stack, alongside setting the current scope to the new method. Creates a new 
@@ -104,24 +107,29 @@ class SemanticRuleManager extends DecafParserBaseListener {
    * @param ctx The MethodDeclContext object defined in DecafParser. Generated at compile time.
    */
   public void enterMethodDecl(DecafParser.MethodDeclContext ctx) {
+    returnFound = false;
     String methodName = ctx.methodName().IDENTIFIER().getText();
 
     if (currentScope.resolve(methodName) == null) {
       MethodSymbol newMethodScope = new MethodSymbol(ctx.methodName().IDENTIFIER().getText(), 
         Symbol.getType(ctx.type().get(0).start.getType()), currentScope);
 
-      ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
+      ListIterator identifierListItr = ctx.IDENTIFIER().listIterator();
 
       // There is a type for all arguments, but also the method return type. Return type is in index
       // 0, so this iterator starts at index 1 until the end; capturing only the argument types.
-      ListIterator indentifierTypesItr = ctx.type().listIterator(1);
-      while(indentifierListItr.hasNext() && indentifierTypesItr.hasNext()) {
+      ListIterator identifierTypesItr = ctx.type().listIterator(1);
+      while(identifierListItr.hasNext() && identifierTypesItr.hasNext()) {
         VariableSymbol newVariableSymbol = 
-          new VariableSymbol(((TerminalNode) indentifierListItr.next()).getText(),
-          Symbol.getType(((DecafParser.TypeContext) indentifierTypesItr.next()).start.getType()));
+          new VariableSymbol(((TerminalNode) identifierListItr.next()).getText(),
+          Symbol.getType(((DecafParser.TypeContext) identifierTypesItr.next()).start.getType()));
 
         newMethodScope.define(newVariableSymbol);
+
       }
+      // If the method doesn't need to return a value then we don't need to look for a return
+      if (newMethodScope.type == Symbol.Type.VOID)  this.returnFound = true;
+       
       currentScope.define(newMethodScope);
       currentScope = newMethodScope;
     } else {
@@ -138,6 +146,11 @@ class SemanticRuleManager extends DecafParserBaseListener {
    * @param ctx The MethodDeclContext object defined in DecafParser. Generated at compile time.
    */
   public void exitMethodDecl(DecafParser.MethodDeclContext ctx) {
+    String methodName = ctx.methodName().IDENTIFIER().getText();
+    if (!this.returnFound)
+      errorHandler.handleError(
+        "Method '" + methodName + "' declared to return a value but no return found", ctx.start);
+
     currentScope = currentScope.getEnclosingScope();
   }
 
@@ -154,6 +167,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
    * @param ctx The BlockContext object defined in DecafParser. Generated at compile time.
    */
   public void exitBlock(DecafParser.BlockContext ctx) {
+    if (CLI.debug) System.out.println(currentScope.toString());
     currentScope = currentScope.getEnclosingScope();
   }
 
@@ -174,10 +188,10 @@ class SemanticRuleManager extends DecafParserBaseListener {
    * @param ctx The VarDeclContext object defined in DecafParser. Generated at compile time.
    */
   public void enterVarDecl(DecafParser.VarDeclContext ctx) {
-    ListIterator indentifierListItr = ctx.IDENTIFIER().listIterator();
+    ListIterator identifierListItr = ctx.IDENTIFIER().listIterator();
 
-    while (indentifierListItr.hasNext()) {
-      String identifierName = ( (TerminalNode) indentifierListItr.next() ).getText();
+    while (identifierListItr.hasNext()) {
+      String identifierName = ( (TerminalNode) identifierListItr.next() ).getText();
 
       boolean found = false;
       if      (currentScope.resolveLocal(identifierName) != null) found = true;
@@ -217,6 +231,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
    */
   public void exitStatement(DecafParser.StatementContext ctx) {
     if (ctx.RETURN() != null) {
+      returnFound = true;
       /*
        * Recursive ascent of the tree from this node is necessary to locate the method in which this
        * return statement has been defined. However, the stack of Scopes cannot be modified directly
@@ -254,7 +269,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
         }
       } 
     }
-    else if (ctx.IF() != null) { // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< TODO: Not handling ELSE
+    else if (ctx.IF() != null) {
       Symbol.Type exprType = exprTypes.get(ctx.expr(0));
       // 11. The expr in an if statement must have type boolean.
       if (exprType != Symbol.Type.BOOLEAN)
@@ -283,7 +298,7 @@ class SemanticRuleManager extends DecafParserBaseListener {
           if (ctx.expr(0).location() != null) {
             Symbol variable = currentScope.resolve(ctx.expr(0).location().IDENTIFIER().getText());
 
-            if (location instanceof ArrayVariableSymbol && variable instanceof ArrayVariableSymbol){ // TODO: Are arrays same type?!
+            if (location instanceof ArrayVariableSymbol && variable instanceof ArrayVariableSymbol){
             /*
              * Both sides of the assignment are arrays, but the right hand side can't be an array if
              * the array indexes aren't present:
@@ -371,8 +386,8 @@ class SemanticRuleManager extends DecafParserBaseListener {
     }
     else if (ctx.BREAK() != null || ctx.CONTINUE() != null) {
       /*
-       * At this point a break/continue statement has been encountered. They have to be in a for.
-       * A for loop is always inside a method, if we ascend the tree from this statement 
+       * At this point a break/continue statement has been encountered which has to be in a FOR-loop
+       * A FOR-loop is always inside a method, if we ascend the tree from this statement 
        * and reach a method declaration without first encountering a for, then we must assume that
        * the for isn't present and the break/continue is not in the right place.
        */

@@ -7,6 +7,9 @@
 
 package decaf;
 
+/**
+ * This class is used to extend a VariableSymbol to hold an additional field; size.
+ */
 public class ArrayVariableSymbol extends VariableSymbol {
   public ArrayVariableSymbol(String name, Type type, int size) { 
     super(name, type);
